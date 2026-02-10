@@ -337,14 +337,6 @@
                     tension: 0.4
                 },
                 {
-                    label: 'Requests Remaining',
-                    data: {!! json_encode($chartData['remaining']) !!},
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: gradient2,
-                    fill: true,
-                    tension: 0.4
-                },
-                {
                     label: 'Recommended Usage',
                     data: {!! json_encode($chartData['recommendation']) !!},
                     borderColor: 'rgb(255, 159, 64)',
@@ -366,14 +358,6 @@
                     data: {!! json_encode($perCheckData['used']) !!},
                     borderColor: 'rgb(102, 126, 234)',
                     backgroundColor: gradient1,
-                    fill: true,
-                    tension: 0.4
-                },
-                {
-                    label: 'Requests Remaining',
-                    data: {!! json_encode($perCheckData['remaining']) !!},
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: gradient2,
                     fill: true,
                     tension: 0.4
                 },
@@ -444,7 +428,7 @@
         // Auto-refresh every 5 minutes
         setInterval(() => {
             console.log('Auto-refreshing dashboard...');
-            window.location.reload();
+            refreshDashboard();
         }, 5 * 60 * 1000);
 
         // Manual refresh function
@@ -452,7 +436,33 @@
             const btn = document.getElementById('refreshBtn');
             btn.disabled = true;
             btn.textContent = '⏳ Refreshing...';
-            window.location.reload();
+            
+            fetch('{{ route('dashboard') }}', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                // Replace the entire body content with the new data
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                document.body.innerHTML = doc.body.innerHTML;
+                
+                // Re-execute the script to reinitialize charts
+                const scripts = doc.querySelectorAll('script');
+                scripts.forEach(script => {
+                    if (script.textContent) {
+                        eval(script.textContent);
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error refreshing dashboard:', error);
+                btn.disabled = false;
+                btn.textContent = '🔄 Refresh Now';
+                alert('Failed to refresh dashboard. Please try again.');
+            });
         }
     </script>
     @endif

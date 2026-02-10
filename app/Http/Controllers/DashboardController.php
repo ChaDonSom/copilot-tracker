@@ -145,9 +145,16 @@ class DashboardController extends Controller
 
             // Calculate recommendation line (ideal trajectory)
             if ($firstSnapshot) {
-                $totalChecks = $history->count();
-                $usagePerCheck = $snapshot->quota_limit / $totalChecks;
-                $recommendation[] = round($index * $usagePerCheck);
+                $startOfMonth = Carbon::parse($firstSnapshot->month . '-01');
+                $daysInMonth = $startOfMonth->daysInMonth;
+                $dailyIdealUsage = $snapshot->quota_limit / $daysInMonth;
+                
+                // Calculate elapsed time from start of month
+                $elapsedDays = $startOfMonth->diffInDays($snapshot->checked_at->startOfDay(), false);
+                $elapsedHours = $snapshot->checked_at->hour + ($snapshot->checked_at->minute / 60);
+                $totalElapsedDays = $elapsedDays + ($elapsedHours / 24);
+                
+                $recommendation[] = round($totalElapsedDays * $dailyIdealUsage);
             }
         }
 
