@@ -104,7 +104,8 @@ class DashboardController extends Controller
         $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
 
         foreach (array_keys($historyByDate->toArray()) as $index => $date) {
-            $daysFromStart = $index;
+            // Use 1-based day index so the first day has the per-day ideal usage (avoid starting at 0)
+            $daysFromStart = $index + 1;
             $dailyRecommendationLine[] = round($daysFromStart * $dailyIdealUsage);
         }
 
