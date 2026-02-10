@@ -226,8 +226,8 @@
                         | Plan: <strong>{{ $user->copilot_plan }}</strong>
                     @endif
                 </span>
-                <div class="header-actions">
-                    <button id="refreshBtn" class="refresh-btn" onclick="refreshDashboard()">🔄 Refresh Data</button>
+                 <div class="header-actions">
+                    <button id="refreshBtn" class="refresh-btn">🔄 Refresh Data</button>
                     <form method="POST" action="{{ route('logout') }}" style="display: inline;">
                         @csrf
                         <button type="submit" class="logout-btn">Logout</button>
@@ -319,10 +319,6 @@
         const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
         gradient1.addColorStop(0, 'rgba(102, 126, 234, 0.5)');
         gradient1.addColorStop(1, 'rgba(118, 75, 162, 0.1)');
-
-        const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient2.addColorStop(0, 'rgba(75, 192, 192, 0.5)');
-        gradient2.addColorStop(1, 'rgba(75, 192, 192, 0.1)');
 
         // Daily view data
         const dailyData = {
@@ -425,44 +421,115 @@
             });
         });
 
-        // Auto-refresh every 5 minutes
-        setInterval(() => {
-            console.log('Auto-refreshing dashboard...');
-            refreshDashboard();
-        }, 5 * 60 * 1000);
-
-        // Manual refresh function
+        // Manual refresh function using JSON API
         function refreshDashboard() {
             const btn = document.getElementById('refreshBtn');
             btn.disabled = true;
             btn.textContent = '⏳ Refreshing...';
             
-            fetch('{{ route('dashboard') }}', {
+            fetch('{{ route('dashboard.refresh') }}', {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             })
-            .then(response => response.text())
-            .then(html => {
-                // Replace the entire body content with the new data
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                document.body.innerHTML = doc.body.innerHTML;
-                
-                // Re-execute the script to reinitialize charts
-                const scripts = doc.querySelectorAll('script');
-                scripts.forEach(script => {
-                    if (script.textContent) {
-                        eval(script.textContent);
+            .then(response => response.json())
+            .then(data => {
+                // Update stats
+                if (data.snapshot) {
+                    const snapshot = data.snapshot;
+                    
+                    // Update stat cards
+                    document.querySelectorAll('.stat-card').forEach((card, index) => {
+                        const valueEl = card.querySelector('.value');
+                        const subtitleEl = card.querySelector('.subtitle');
+                        
+                        if (index === 0) { // Total Limit
+                            valueEl.textContent = snapshot.quota_limit.toLocaleString();
+                        } else if (index === 1) { // Remaining
+                            valueEl.textContent = snapshot.remaining.toLocaleString();
+                            subtitleEl.textContent = snapshot.percent_remaining.toFixed(1) + '% left';
+                            const progressBar = card.querySelector('.progress-fill');
+                            if (progressBar) {
+                                progressBar.style.width = snapshot.percent_remaining + '%';
+                                if (snapshot.percent_remaining < 25) {
+                                    progressBar.classList.add('warning');
+                                } else {
+                                    progressBar.classList.remove('warning');
+                                }
+                            }
+                        } else if (index === 2) { // Used This Month
+                            valueEl.textContent = snapshot.used.toLocaleString();
+                            subtitleEl.textContent = ((snapshot.used / snapshot.quota_limit) * 100).toFixed(1) + '% consumed';
+                        } else if (index === 3) { // Resets On
+                            const resetDate = new Date(snapshot.reset_date);
+                            valueEl.textContent = resetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        }
+                    });
+                    
+                    // Update recommendation cards if they exist
+                    if (data.recommendation) {
+                        const recCards = document.querySelectorAll('.stat-card');
+                        if (recCards.length > 4) {
+                            recCards[4].querySelector('.value').textContent = data.recommendation.dailyRecommended.toLocaleString();
+                            recCards[4].querySelector('.subtitle').textContent = 'requests/day for ' + data.recommendation.daysRemaining + ' days';
+                        }
+                        if (recCards.length > 5) {
+                            recCards[5].querySelector('.value').textContent = data.recommendation.dailyIdealUsage.toLocaleString();
+                        }
                     }
-                });
+                }
+                
+                // Update chart data
+                if (data.chartData && data.perCheckData) {
+                    // Update daily data
+                    dailyData.labels = data.chartData.labels;
+                    dailyData.datasets[0].data = data.chartData.used;
+                    dailyData.datasets[1].data = data.chartData.recommendation;
+                    
+                    // Update per-check data
+                    perCheckData.labels = data.perCheckData.labels;
+                    perCheckData.datasets[0].data = data.perCheckData.used;
+                    perCheckData.datasets[1].data = data.perCheckData.recommendation;
+                    
+                    // Update current chart
+                    chart.update();
+                }
+                
+                // Restore button state
+                btn.disabled = false;
+                btn.textContent = '🔄 Refresh Data';
             })
             .catch(error => {
                 console.error('Error refreshing dashboard:', error);
                 btn.disabled = false;
-                btn.textContent = '🔄 Refresh Now';
+                btn.textContent = '🔄 Refresh Data';
                 alert('Failed to refresh dashboard. Please try again.');
             });
+        }
+
+        // Attach refresh handler to button
+        document.getElementById('refreshBtn').addEventListener('click', refreshDashboard);
+
+        // Auto-refresh every 5 minutes - set up only once
+        setInterval(() => {
+            console.log('Auto-refreshing dashboard...');
+            refreshDashboard();
+        }, 5 * 60 * 1000);
+    </script>
+    @else
+    <script>
+        // Global refresh function for when no snapshot/chart exists yet
+        function refreshDashboard() {
+            window.location.reload();
+        }
+
+        // Attach refresh handler to button
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', refreshDashboard);
         }
     </script>
     @endif
