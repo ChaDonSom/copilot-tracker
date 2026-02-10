@@ -44,6 +44,33 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+
+        .refresh-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
 
         .logout-btn {
@@ -127,6 +154,39 @@
             margin-bottom: 20px;
         }
 
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .granularity-toggle {
+            display: flex;
+            gap: 5px;
+            background: #f0f0f0;
+            padding: 4px;
+            border-radius: 5px;
+        }
+
+        .granularity-btn {
+            background: transparent;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .granularity-btn.active {
+            background: white;
+            color: #667eea;
+            font-weight: 500;
+        }
+
         .no-data {
             text-align: center;
             padding: 40px;
@@ -166,10 +226,13 @@
                         | Plan: <strong>{{ $user->copilot_plan }}</strong>
                     @endif
                 </span>
-                <form method="POST" action="{{ route('logout') }}" style="display: inline;">
-                    @csrf
-                    <button type="submit" class="logout-btn">Logout</button>
-                </form>
+                <div class="header-actions">
+                    <button id="refreshBtn" class="refresh-btn" onclick="refreshDashboard()">🔄 Refresh Data</button>
+                    <form method="POST" action="{{ route('logout') }}" style="display: inline;">
+                        @csrf
+                        <button type="submit" class="logout-btn">Logout</button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -196,7 +259,7 @@
                     <div class="value">{{ number_format($snapshot->remaining) }}</div>
                     <div class="subtitle">{{ number_format($snapshot->percent_remaining, 1) }}% left</div>
                     <div class="progress-bar">
-                        <div class="progress-fill {{ $snapshot->percent_remaining < 25 ? 'warning' : '' }}" 
+                        <div class="progress-fill {{ $snapshot->percent_remaining < 25 ? 'warning' : '' }}"
                              style="width: {{ $snapshot->percent_remaining }}%"></div>
                     </div>
                 </div>
@@ -212,10 +275,32 @@
                     <div class="value">{{ $snapshot->reset_date->format('M d') }}</div>
                     <div class="subtitle">{{ $snapshot->reset_date->diffForHumans() }}</div>
                 </div>
+
+                @if($recommendation)
+                <div class="stat-card">
+                    <h3>Recommended Daily Usage</h3>
+                    <div class="value">{{ number_format($recommendation['dailyRecommended']) }}</div>
+                    <div class="subtitle">requests/day for {{ $recommendation['daysRemaining'] }} days</div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Ideal Daily Rate</h3>
+                    <div class="value">{{ number_format($recommendation['dailyIdealUsage']) }}</div>
+                    <div class="subtitle">avg requests/day</div>
+                </div>
+                @endif
             </div>
 
             <div class="chart-card">
-                <h2>📊 Usage Trend (Last 30 Days)</h2>
+                <div class="chart-header">
+                    <h2>📊 Usage Trend (Last 30 Days)</h2>
+                    @if(count($chartData['labels']) > 0)
+                    <div class="granularity-toggle">
+                        <button class="granularity-btn active" data-view="daily">Daily View</button>
+                        <button class="granularity-btn" data-view="per-check">Per-Check View</button>
+                    </div>
+                    @endif
+                </div>
                 @if(count($chartData['labels']) > 0)
                     <canvas id="usageChart"></canvas>
                 @else
@@ -230,7 +315,7 @@
     @if($snapshot && count($chartData['labels']) > 0)
     <script>
         const ctx = document.getElementById('usageChart').getContext('2d');
-        
+
         const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
         gradient1.addColorStop(0, 'rgba(102, 126, 234, 0.5)');
         gradient1.addColorStop(1, 'rgba(118, 75, 162, 0.1)');
@@ -239,29 +324,59 @@
         gradient2.addColorStop(0, 'rgba(75, 192, 192, 0.5)');
         gradient2.addColorStop(1, 'rgba(75, 192, 192, 0.1)');
 
-        new Chart(ctx, {
+        // Daily view data
+        const dailyData = {
+            labels: {!! json_encode($chartData['labels']) !!},
+            datasets: [
+                {
+                    label: 'Requests Used',
+                    data: {!! json_encode($chartData['used']) !!},
+                    borderColor: 'rgb(102, 126, 234)',
+                    backgroundColor: gradient1,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Recommended Usage',
+                    data: {!! json_encode($chartData['recommendation']) !!},
+                    borderColor: 'rgb(255, 159, 64)',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0
+                }
+            ]
+        };
+
+        // Per-check view data
+        const perCheckData = {
+            labels: {!! json_encode($perCheckData['labels']) !!},
+            datasets: [
+                {
+                    label: 'Cumulative Requests Used',
+                    data: {!! json_encode($perCheckData['used']) !!},
+                    borderColor: 'rgb(102, 126, 234)',
+                    backgroundColor: gradient1,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Recommended Usage',
+                    data: {!! json_encode($perCheckData['recommendation']) !!},
+                    borderColor: 'rgb(255, 159, 64)',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0
+                }
+            ]
+        };
+
+        const chart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: {!! json_encode($chartData['labels']) !!},
-                datasets: [
-                    {
-                        label: 'Requests Used',
-                        data: {!! json_encode($chartData['used']) !!},
-                        borderColor: 'rgb(102, 126, 234)',
-                        backgroundColor: gradient1,
-                        fill: true,
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Requests Remaining',
-                        data: {!! json_encode($chartData['remaining']) !!},
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: gradient2,
-                        fill: true,
-                        tension: 0.4
-                    }
-                ]
-            },
+            data: dailyData,
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
@@ -293,6 +408,62 @@
                 }
             }
         });
+
+        // Handle granularity toggle
+        document.querySelectorAll('.granularity-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.granularity-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const view = this.dataset.view;
+                if (view === 'daily') {
+                    chart.data = dailyData;
+                } else {
+                    chart.data = perCheckData;
+                }
+                chart.update();
+            });
+        });
+
+        // Auto-refresh every 5 minutes
+        setInterval(() => {
+            console.log('Auto-refreshing dashboard...');
+            refreshDashboard();
+        }, 5 * 60 * 1000);
+
+        // Manual refresh function
+        function refreshDashboard() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Refreshing...';
+            
+            fetch('{{ route('dashboard') }}', {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                // Replace the entire body content with the new data
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                document.body.innerHTML = doc.body.innerHTML;
+                
+                // Re-execute the script to reinitialize charts
+                const scripts = doc.querySelectorAll('script');
+                scripts.forEach(script => {
+                    if (script.textContent) {
+                        eval(script.textContent);
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error refreshing dashboard:', error);
+                btn.disabled = false;
+                btn.textContent = '🔄 Refresh Now';
+                alert('Failed to refresh dashboard. Please try again.');
+            });
+        }
     </script>
     @endif
 </body>
