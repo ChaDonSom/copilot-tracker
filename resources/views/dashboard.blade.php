@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GitHub Copilot Usage Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -347,11 +348,10 @@
 
         // Per-check view data
         const perCheckData = {
-            labels: {!! json_encode($perCheckData['labels']) !!},
             datasets: [
                 {
                     label: 'Cumulative Requests Used',
-                    data: {!! json_encode($perCheckData['used']) !!},
+                    data: {!! json_encode(array_map(fn($timestamp, $value) => ['x' => $timestamp, 'y' => $value], $perCheckData['timestamps'], $perCheckData['used'])) !!},
                     borderColor: 'rgb(102, 126, 234)',
                     backgroundColor: gradient1,
                     fill: true,
@@ -359,7 +359,7 @@
                 },
                 {
                     label: 'Recommended Usage',
-                    data: {!! json_encode($perCheckData['recommendation']) !!},
+                    data: {!! json_encode(array_map(fn($timestamp, $value) => ['x' => $timestamp, 'y' => $value], $perCheckData['timestamps'], $perCheckData['recommendation'])) !!},
                     borderColor: 'rgb(255, 159, 64)',
                     backgroundColor: 'transparent',
                     borderDash: [5, 5],
@@ -418,8 +418,19 @@
                 currentView = this.dataset.view;
                 if (currentView === 'daily') {
                     chart.data = dailyData;
+                    // Reset x-axis to category scale
+                    chart.options.scales.x.type = 'category';
                 } else {
                     chart.data = perCheckData;
+                    // Switch to time scale for per-check view
+                    chart.options.scales.x.type = 'time';
+                    chart.options.scales.x.time = {
+                        displayFormats: {
+                            hour: 'MMM d HH:mm',
+                            day: 'MMM d'
+                        },
+                        tooltipFormat: 'MMM d, yyyy HH:mm'
+                    };
                 }
                 chart.update();
             });
@@ -559,19 +570,35 @@
                     dailyData.labels = data.chartData.labels;
                     dailyData.datasets[0].data = data.chartData.used;
                     dailyData.datasets[1].data = data.chartData.recommendation;
-                    
-                    // Update per-check data
-                    perCheckData.labels = data.perCheckData.labels;
-                    perCheckData.datasets[0].data = data.perCheckData.used;
-                    perCheckData.datasets[1].data = data.perCheckData.recommendation;
-                    
+
+                    // Update per-check data with timestamps
+                    if (data.perCheckData.timestamps && data.perCheckData.used) {
+                        perCheckData.datasets[0].data = data.perCheckData.timestamps.map((timestamp, index) => ({
+                            x: timestamp,
+                            y: data.perCheckData.used[index]
+                        }));
+                        perCheckData.datasets[1].data = data.perCheckData.timestamps.map((timestamp, index) => ({
+                            x: timestamp,
+                            y: data.perCheckData.recommendation[index]
+                        }));
+                    }
+
                     // Restore the current view state
                     if (currentView === 'daily') {
                         chart.data = dailyData;
+                        chart.options.scales.x.type = 'category';
                     } else {
                         chart.data = perCheckData;
+                        chart.options.scales.x.type = 'time';
+                        chart.options.scales.x.time = {
+                            displayFormats: {
+                                hour: 'MMM d HH:mm',
+                                day: 'MMM d'
+                            },
+                            tooltipFormat: 'MMM d, yyyy HH:mm'
+                        };
                     }
-                    
+
                     // Update current chart
                     chart.update();
                 }

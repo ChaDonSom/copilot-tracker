@@ -42,6 +42,13 @@ class DashboardController extends Controller
         // Force a fresh check from GitHub API
         $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
 
+        // If the API call failed, return an error
+        if (!$latestSnapshot) {
+            return response()->json([
+                'error' => 'Failed to fetch usage data from GitHub. Please try again later.'
+            ], 500);
+        }
+
         // Get historical data for chart (last 30 days)
         $history = $user->usageSnapshots()
             ->where('checked_at', '>=', now()->subDays(30))
@@ -146,14 +153,20 @@ class DashboardController extends Controller
     private function preparePerCheckData($history)
     {
         $labels = [];
+        $timestamps = [];
         $used = [];
         $recommendation = [];
 
         $cumulativeUsed = 0;
         $firstSnapshot = $history->first();
+        $lastSnapshot = $history->last();
+
+        // Calculate the current total used from the latest snapshot
+        $currentTotalUsed = $lastSnapshot ? $lastSnapshot->used : 0;
 
         foreach ($history as $index => $snapshot) {
             $labels[] = $snapshot->checked_at->format('M d H:i');
+            $timestamps[] = $snapshot->checked_at->toIso8601String();
 
             if ($index === 0) {
                 $used[] = 0;
@@ -184,8 +197,19 @@ class DashboardController extends Controller
             }
         }
 
+        // Adjust the used values to reflect actual position: currentTotalUsed - cumulativeUsed to currentTotalUsed
+        // This means we're showing from (currentTotalUsed - totalTracked) to currentTotalUsed
+        $totalTracked = $cumulativeUsed;
+        $baselineUsed = $currentTotalUsed - $totalTracked;
+
+        $used = array_map(fn($val) => $baselineUsed + $val, $used);
+
+        // Adjust recommendation line similarly to start from the baseline
+        $recommendation = array_map(fn($val) => $baselineUsed + $val, $recommendation);
+
         return [
             'labels' => $labels,
+            'timestamps' => $timestamps,
             'used' => $used,
             'recommendation' => $recommendation,
         ];
