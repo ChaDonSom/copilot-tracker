@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\GitHubCopilotService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -29,6 +30,29 @@ class DashboardController extends Controller
             ->orderBy('checked_at', 'asc')
             ->get();
 
+        $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot, $user);
+
+        return view('dashboard', $viewData);
+    }
+
+    public function refresh(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Force a fresh check from GitHub API
+        $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
+
+        // Get historical data for chart (last 30 days)
+        $history = $user->usageSnapshots()
+            ->where('checked_at', '>=', now()->subDays(30))
+            ->orderBy('checked_at', 'asc')
+            ->get();
+
+        return response()->json($this->prepareChartDataFromHistory($history, $latestSnapshot, $user));
+    }
+
+    private function prepareChartDataFromHistory($history, $latestSnapshot, $user): array
+    {
         // Calculate daily usage
         $dailyUsage = [];
         $historyByDate = $history->groupBy(fn($snapshot) => $snapshot->checked_at->format('Y-m-d'));
@@ -57,21 +81,20 @@ class DashboardController extends Controller
         $chartData = [
             'labels' => array_keys($dailyUsage),
             'used' => array_column($dailyUsage, 'used'),
-            'remaining' => array_column($dailyUsage, 'remaining'),
             'recommendation' => $recommendationData['dailyRecommendationLine'],
         ];
 
         // Prepare per-check chart data
         $perCheckData = $this->preparePerCheckData($history);
 
-        return view('dashboard', [
+        return [
             'user' => $user,
             'snapshot' => $latestSnapshot,
             'chartData' => $chartData,
             'perCheckData' => $perCheckData,
             'dailyUsage' => $dailyUsage,
             'recommendation' => $recommendationData,
-        ]);
+        ];
     }
 
     private function calculateRecommendation($snapshot, $history)
@@ -102,10 +125,12 @@ class DashboardController extends Controller
         // Build recommendation line for the chart (cumulative usage trajectory)
         $dailyRecommendationLine = [];
         $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
+        $cycleStart = $resetDateStart->copy()->startOfDay();
 
-        foreach (array_keys($historyByDate->toArray()) as $index => $date) {
-            // Use 1-based day index so the first day has the per-day ideal usage (avoid starting at 0)
-            $daysFromStart = $index + 1;
+        foreach (array_keys($historyByDate->toArray()) as $date) {
+            $currentDate = \Carbon\Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
+            // 1-based day index: same-day diff is 0, so add 1; this also preserves per-day ideal usage on first day
+            $daysFromStart = max(1, $cycleStart->diffInDays($currentDate) + 1);
             $dailyRecommendationLine[] = round($daysFromStart * $dailyIdealUsage);
         }
 
@@ -122,7 +147,6 @@ class DashboardController extends Controller
     {
         $labels = [];
         $used = [];
-        $remaining = [];
         $recommendation = [];
 
         $cumulativeUsed = 0;
@@ -143,8 +167,6 @@ class DashboardController extends Controller
                 $used[] = $cumulativeUsed;
             }
 
-            $remaining[] = $snapshot->remaining;
-
             // Calculate recommendation line (ideal trajectory)
             if ($firstSnapshot) {
                 // Calculate cycle start from reset date (30 days back)
@@ -153,8 +175,8 @@ class DashboardController extends Controller
                 $totalDaysInCycle = 30;
                 $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
 
-                // Calculate elapsed time from cycle start
-                $elapsedDays = $cycleStart->diffInDays($snapshot->checked_at->startOfDay(), false);
+                // Calculate elapsed time from cycle start - use ->copy() to avoid mutating the original
+                $elapsedDays = $cycleStart->diffInDays($snapshot->checked_at->copy()->startOfDay(), false);
                 $elapsedHours = $snapshot->checked_at->hour + ($snapshot->checked_at->minute / 60);
                 $totalElapsedDays = $elapsedDays + ($elapsedHours / 24);
 
@@ -165,7 +187,6 @@ class DashboardController extends Controller
         return [
             'labels' => $labels,
             'used' => $used,
-            'remaining' => $remaining,
             'recommendation' => $recommendation,
         ];
     }
