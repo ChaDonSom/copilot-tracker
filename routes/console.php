@@ -13,4 +13,4 @@ Schedule::command('copilot:check-usage')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground()
-    ->appendOutputTo(storage_path('logs/copilot-usage.log'));
+    ->appendOutputTo(storage_path('logs/laravel.log'));
