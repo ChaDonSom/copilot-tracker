@@ -147,12 +147,14 @@ class DashboardController extends Controller
 
             // Calculate recommendation line (ideal trajectory)
             if ($firstSnapshot) {
-                $startOfMonth = Carbon::parse($firstSnapshot->month . '-01');
-                $daysInMonth = $startOfMonth->daysInMonth;
-                $dailyIdealUsage = $snapshot->quota_limit / $daysInMonth;
+                // Calculate cycle start from reset date (30 days back)
+                $resetDate = $snapshot->reset_date;
+                $cycleStart = $resetDate->copy()->subDays(30);
+                $totalDaysInCycle = 30;
+                $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
 
-                // Calculate elapsed time from start of month
-                $elapsedDays = $startOfMonth->diffInDays($snapshot->checked_at->startOfDay(), false);
+                // Calculate elapsed time from cycle start
+                $elapsedDays = $cycleStart->diffInDays($snapshot->checked_at->startOfDay(), false);
                 $elapsedHours = $snapshot->checked_at->hour + ($snapshot->checked_at->minute / 60);
                 $totalElapsedDays = $elapsedDays + ($elapsedHours / 24);
 
