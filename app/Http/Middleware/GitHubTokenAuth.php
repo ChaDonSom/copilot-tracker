@@ -24,18 +24,29 @@ class GitHubTokenAuth
             ], 401);
         }
 
-        $user = $this->githubService->findOrCreateUser($token);
+        try {
+            $user = $this->githubService->findOrCreateUser($token);
 
-        if (!$user) {
+            if (!$user) {
+                return response()->json([
+                    'error' => 'Invalid GitHub token',
+                    'message' => 'Could not authenticate with the provided token',
+                ], 401);
+            }
+
+            // Attach user to request for controllers
+            $request->setUserResolver(fn() => $user);
+
+            return $next($request);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Authentication error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return response()->json([
-                'error' => 'Invalid GitHub token',
-                'message' => 'Could not authenticate with the provided token',
-            ], 401);
+                'error' => 'Authentication failed',
+                'message' => 'An error occurred during authentication: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // Attach user to request for controllers
-        $request->setUserResolver(fn() => $user);
-
-        return $next($request);
     }
 }

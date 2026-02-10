@@ -154,17 +154,33 @@ class GitHubCopilotService
      */
     public function findOrCreateUser(string $token): ?User
     {
-        $validation = $this->validateToken($token);
+        try {
+            $validation = $this->validateToken($token);
 
-        if (!$validation['valid']) {
-            return null;
+            if (!$validation['valid']) {
+                Log::warning('Token validation failed', ['error' => $validation['error'] ?? 'Unknown']);
+                return null;
+            }
+
+            $username = $validation['username'];
+
+            Log::info('Finding or creating user', ['username' => $username]);
+
+            return User::updateOrCreate(
+                ['github_username' => $username],
+                ['github_token' => $token]
+            );
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            Log::error('Encryption error - APP_KEY may be misconfigured', [
+                'error' => $e->getMessage(),
+            ]);
+            throw new \Exception('Encryption error: APP_KEY may be misconfigured or changed');
+        } catch (\Exception $e) {
+            Log::error('Failed to find or create user', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
         }
-
-        $username = $validation['username'];
-
-        return User::updateOrCreate(
-            ['github_username' => $username],
-            ['github_token' => $token]
-        );
     }
 }
