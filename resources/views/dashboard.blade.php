@@ -465,7 +465,8 @@
             .then(data => {
                 // Validate required properties
                 if (!data.snapshot || typeof data.snapshot.quota_limit === 'undefined') {
-                    throw new Error('Invalid response data');
+                    console.error('Invalid response data:', data);
+                    throw new Error('Invalid response: missing snapshot or quota_limit property');
                 }
                 
                 const snapshot = data.snapshot;

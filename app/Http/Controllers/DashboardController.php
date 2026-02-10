@@ -30,7 +30,7 @@ class DashboardController extends Controller
             ->orderBy('checked_at', 'asc')
             ->get();
 
-        $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot);
+        $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot, $user);
 
         return view('dashboard', $viewData);
     }
@@ -48,10 +48,10 @@ class DashboardController extends Controller
             ->orderBy('checked_at', 'asc')
             ->get();
 
-        return response()->json($this->prepareChartDataFromHistory($history, $latestSnapshot));
+        return response()->json($this->prepareChartDataFromHistory($history, $latestSnapshot, $user));
     }
 
-    private function prepareChartDataFromHistory($history, $latestSnapshot): array
+    private function prepareChartDataFromHistory($history, $latestSnapshot, $user): array
     {
         // Calculate daily usage
         $dailyUsage = [];
@@ -88,7 +88,7 @@ class DashboardController extends Controller
         $perCheckData = $this->preparePerCheckData($history);
 
         return [
-            'user' => request()->user(),
+            'user' => $user,
             'snapshot' => $latestSnapshot,
             'chartData' => $chartData,
             'perCheckData' => $perCheckData,
