@@ -1,11 +1,13 @@
 # Copilot Tracker - Laravel App
 
-A Laravel application for centrally tracking GitHub Copilot premium request usage across multiple machines.
+A Laravel application for centrally tracking GitHub Copilot premium request usage across multiple machines with **web dashboard** and API access.
 
 ## Features
 
-- 🔐 **GitHub Token Authentication** - Uses your GitHub token to identify you
-- 📊 **Cross-Machine Tracking** - See your usage from any machine
+- 🌐 **Web Dashboard with OAuth** - Login with GitHub to view your usage graphs
+- 📊 **Usage Visualization** - Interactive charts showing usage trends over time
+- 🔐 **GitHub Token Authentication** - API access using your GitHub token
+- 📈 **Cross-Machine Tracking** - See your usage from any machine
 - ⏰ **Hourly Checks** - Scheduled jobs automatically check usage every hour
 - 🚀 **API Endpoints** - RESTful API for the bash script integration
 - 🔒 **Secure Token Storage** - Tokens are encrypted at rest
@@ -42,6 +44,36 @@ php artisan migrate
 # Start the development server
 php artisan serve
 ```
+
+Visit `http://localhost:8000` and click "Login with GitHub" to access the dashboard.
+
+### GitHub OAuth Setup (Required for Web Dashboard)
+
+To enable GitHub OAuth login for the web dashboard:
+
+1. **Create a GitHub OAuth App:**
+   - Go to https://github.com/settings/developers
+   - Click "New OAuth App"
+   - Fill in the form:
+     - **Application name:** Copilot Usage Tracker
+     - **Homepage URL:** `http://localhost:8000` (or your production URL)
+     - **Authorization callback URL:** `http://localhost:8000/login/github/callback`
+   - Click "Register application"
+   - Copy your **Client ID** and **Client Secret**
+
+2. **Configure Environment Variables:**
+   ```env
+   GITHUB_CLIENT_ID=your_client_id_here
+   GITHUB_CLIENT_SECRET=your_client_secret_here
+   GITHUB_REDIRECT_URL=http://localhost:8000/login/github/callback
+   ```
+
+3. **Restart your Laravel server:**
+   ```bash
+   php artisan serve
+   ```
+
+Now you can login via the web interface and view your usage graphs!
 
 ### Laravel Cloud Deployment
 
@@ -84,6 +116,24 @@ php artisan serve
 Deployment takes approximately 40-60 seconds.
 
 **Troubleshooting:** See [../DEBUGGING_GUIDE.md](../DEBUGGING_GUIDE.md) for common issues.
+
+## Using the Web Dashboard
+
+### Access
+
+1. Navigate to your deployed Laravel app URL
+2. Click "Login with GitHub" 
+3. Authorize the application
+4. View your Copilot usage dashboard with interactive graphs
+
+### Dashboard Features
+
+- **Current Usage Stats** - See your quota limit, remaining requests, and usage percentage
+- **Usage Trend Graph** - 30-day historical view showing:
+  - Daily requests used
+  - Remaining requests over time
+- **Visual Warnings** - Color-coded progress bars warn when running low on quota
+- **Auto-Refresh** - Click refresh to get latest data from GitHub
 
 ## API Endpoints
 
