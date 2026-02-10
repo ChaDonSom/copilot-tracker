@@ -14,7 +14,8 @@ A Laravel application for centrally tracking GitHub Copilot premium request usag
 
 - PHP 8.2+
 - Composer
-- SQLite (default) or MySQL/PostgreSQL
+- SQLite (for local development)
+- **PostgreSQL (required for Laravel Cloud production)**
 
 ## Installation
 
@@ -44,13 +45,45 @@ php artisan serve
 
 ### Laravel Cloud Deployment
 
-1. Push to your repository
-2. Connect to Laravel Cloud
-3. Configure environment variables (APP_KEY, DB settings)
-4. Enable the scheduler in Laravel Cloud settings
-5. Deploy!
+**⚠️ Important:** Laravel Cloud requires PostgreSQL (SQLite is not supported).
 
-The scheduler is configured to run `copilot:check-usage` every hour automatically.
+1. **Create PostgreSQL Database:**
+   - Go to Laravel Cloud dashboard → "Databases"
+   - Create new PostgreSQL database
+   - Note: Free tier costs $0 with no usage
+   - Copy the connection credentials
+
+2. **Configure Environment Variables:**
+   ```env
+   APP_ENV=production
+   APP_KEY=base64:YOUR_GENERATED_KEY
+   APP_DEBUG=false
+   
+   DB_CONNECTION=pgsql
+   DB_HOST=your-host.laravel.cloud
+   DB_PORT=5432
+   DB_DATABASE=your-database
+   DB_USERNAME=your-username
+   DB_PASSWORD=your-password
+   ```
+
+3. **Push to Repository:**
+   ```bash
+   git push origin master
+   ```
+
+4. **Run Migrations** (in Laravel Cloud console):
+   ```bash
+   php artisan migrate --force
+   ```
+
+5. **Enable Scheduler** (optional, for automatic checks):
+   - Enable in Laravel Cloud settings
+   - Runs `copilot:check-usage` every hour
+
+Deployment takes approximately 40-60 seconds.
+
+**Troubleshooting:** See [../DEBUGGING_GUIDE.md](../DEBUGGING_GUIDE.md) for common issues.
 
 ## API Endpoints
 
