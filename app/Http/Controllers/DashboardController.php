@@ -116,7 +116,7 @@ class DashboardController extends Controller
                 'totalRecommendedByNow' => 0,
                 'dailyRecommendationLine' => [],
                 'endOfDayUsage' => 0,
-                'endOfDayPercentageLeft' => 0,
+                'endOfDayPercentageLeft' => null,
             ];
         }
 
@@ -150,7 +150,7 @@ class DashboardController extends Controller
         // Percentage left = 100 - ((end-of-day usage / quota limit) * 100)
         $endOfDayPercentageLeft = $snapshot->quota_limit > 0
             ? round(100 - (($endOfDayUsage / $snapshot->quota_limit) * 100), 2)
-            : 0;
+            : null;
 
         return [
             'dailyRecommended' => $dailyRecommended,
