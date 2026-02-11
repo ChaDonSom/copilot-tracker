@@ -14,6 +14,7 @@ class User extends Authenticatable
     protected $fillable = [
         'github_username',
         'github_token',
+        'github_oauth_token',
         'copilot_plan',
         'quota_limit',
         'quota_reset_date',
@@ -22,6 +23,7 @@ class User extends Authenticatable
 
     protected $hidden = [
         'github_token',
+        'github_oauth_token',
     ];
 
     protected function casts(): array
@@ -40,6 +42,16 @@ class User extends Authenticatable
     public function getGithubTokenAttribute(string $value): string
     {
         return Crypt::decryptString($value);
+    }
+
+    public function setGithubOauthTokenAttribute(?string $value): void
+    {
+        $this->attributes['github_oauth_token'] = $value ? Crypt::encryptString($value) : null;
+    }
+
+    public function getGithubOauthTokenAttribute(?string $value): ?string
+    {
+        return $value ? Crypt::decryptString($value) : null;
     }
 
     public function usageSnapshots(): HasMany

@@ -58,7 +58,7 @@ The app now supports two authentication methods:
 
 **Interactive Graph:**
 - 30-day usage trend
-- Two datasets: "Requests Used" and "Requests Remaining"
+- Three datasets: "Requests Used", "Cumulative Requests Used", and "Recommended Usage"
 - Built with Chart.js
 - Responsive design
 
@@ -149,9 +149,9 @@ No schema changes required - uses existing:
    - Verify dashboard displays
    - Check graphs render with data
 
-4. **(Optional) Add Refresh Button:**
-   - Could add manual refresh to fetch latest data
-   - Currently uses cached data from latest snapshot
+4. **Verify Refresh Behavior:**
+   - Confirm the dashboard refresh button fetches the latest data
+   - Confirm the automatic refresh/JSON endpoint behavior works as expected
 
 ## Files Modified
 

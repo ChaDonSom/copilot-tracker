@@ -24,14 +24,14 @@ class AuthController extends Controller
             $user = User::firstOrCreate(
                 ['github_username' => $githubUser->getNickname()],
                 [
-                    'github_token' => $githubUser->token,
+                    'github_oauth_token' => $githubUser->token,
                     'copilot_plan' => null,
                 ]
             );
 
-            // Update token if it changed
+            // Update OAuth token if it changed, without overwriting any existing PAT
             if ($user->wasRecentlyCreated === false) {
-                $user->github_token = $githubUser->token;
+                $user->github_oauth_token = $githubUser->token;
                 $user->save();
             }
 
@@ -39,8 +39,12 @@ class AuthController extends Controller
 
             return redirect()->route('dashboard');
         } catch (\Exception $e) {
+            \Log::error('GitHub OAuth authentication failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return redirect()->route('home')
-                ->with('error', 'Failed to authenticate with GitHub: ' . $e->getMessage());
+                ->with('error', 'Failed to authenticate with GitHub. Please try again.');
         }
     }
 

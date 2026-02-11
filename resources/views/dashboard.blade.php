@@ -268,7 +268,13 @@
                 <div class="stat-card" data-stat="used">
                     <h3>Used This Month</h3>
                     <div class="value">{{ number_format($snapshot->used) }}</div>
-                    <div class="subtitle">{{ number_format((($snapshot->used / $snapshot->quota_limit) * 100), 1) }}% consumed</div>
+                    <div class="subtitle">
+                        @if($snapshot->quota_limit > 0)
+                            {{ number_format((($snapshot->used / $snapshot->quota_limit) * 100), 1) }}% consumed
+                        @else
+                            {{ number_format(100 - $snapshot->percent_remaining, 1) }}% consumed
+                        @endif
+                    </div>
                 </div>
 
                 <div class="stat-card" data-stat="resets-on">
@@ -620,10 +626,14 @@
         // Attach refresh handler to button
         document.getElementById('refreshBtn').addEventListener('click', refreshDashboard);
 
-        // Auto-refresh every 5 minutes - set up only once
+        // Auto-refresh every 5 minutes - only when tab is visible
         setInterval(() => {
-            console.log('Auto-refreshing dashboard...');
-            refreshDashboard();
+            if (document.visibilityState === 'visible') {
+                console.log('Auto-refreshing dashboard...');
+                refreshDashboard();
+            } else {
+                console.log('Tab not visible, skipping auto-refresh');
+            }
         }, 5 * 60 * 1000);
     </script>
     @else

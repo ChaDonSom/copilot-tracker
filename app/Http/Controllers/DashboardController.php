@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Services\GitHubCopilotService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
