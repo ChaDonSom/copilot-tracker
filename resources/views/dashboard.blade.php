@@ -295,6 +295,14 @@
                     <div class="value">{{ number_format($recommendation['dailyIdealUsage']) }}</div>
                     <div class="subtitle">avg requests/day</div>
                 </div>
+
+                @if($recommendation && $recommendation['endOfDayPercentageLeft'] !== null)
+                <div class="stat-card" data-stat="end-of-day-percentage">
+                    <h3>End-of-Day Quota Left</h3>
+                    <div class="value">{{ number_format($recommendation['endOfDayPercentageLeft'], 1) }}%</div>
+                    <div class="subtitle">{{ number_format($recommendation['endOfDayUsage'], 2) }} / {{ number_format($snapshot->quota_limit) }} projected</div>
+                </div>
+                @endif
                 @endif
             </div>
 
@@ -582,6 +590,21 @@
                         const idealDailyRateValue = normalizeNumber(data.recommendation.dailyIdealUsage);
                         if (valueEl) {
                             valueEl.textContent = idealDailyRateValue.toLocaleString();
+                        }
+                    }
+                    
+                    const endOfDayCard = document.querySelector('[data-stat="end-of-day-percentage"]');
+                    if (endOfDayCard && typeof data.recommendation.endOfDayPercentageLeft !== 'undefined' && typeof data.recommendation.endOfDayUsage !== 'undefined' && data.recommendation.endOfDayPercentageLeft !== null) {
+                        const valueEl = endOfDayCard.querySelector('.value');
+                        const subtitleEl = endOfDayCard.querySelector('.subtitle');
+                        const endOfDayPercentageLeft = normalizeNumber(data.recommendation.endOfDayPercentageLeft);
+                        const endOfDayUsage = normalizeNumber(data.recommendation.endOfDayUsage);
+                        
+                        if (valueEl) {
+                            valueEl.textContent = endOfDayPercentageLeft.toFixed(1) + '%';
+                        }
+                        if (subtitleEl) {
+                            subtitleEl.textContent = endOfDayUsage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' / ' + quotaLimit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' projected';
                         }
                     }
                 }
