@@ -115,6 +115,8 @@ class DashboardController extends Controller
                 'daysRemaining' => 0,
                 'totalRecommendedByNow' => 0,
                 'dailyRecommendationLine' => [],
+                'endOfDayUsage' => 0,
+                'endOfDayPercentageLeft' => 0,
             ];
         }
 
@@ -142,12 +144,22 @@ class DashboardController extends Controller
             round($dailyIdealUsage, 2)
         );
 
+        // Calculate end-of-day percentage left
+        // End-of-day usage = used this month + recommended daily usage
+        $endOfDayUsage = $snapshot->used + $dailyRecommended;
+        // Percentage left = 100 - ((end-of-day usage / quota limit) * 100)
+        $endOfDayPercentageLeft = $snapshot->quota_limit > 0
+            ? round(100 - (($endOfDayUsage / $snapshot->quota_limit) * 100), 2)
+            : 0;
+
         return [
             'dailyRecommended' => $dailyRecommended,
             'daysRemaining' => $daysRemaining,
             'totalRecommendedByNow' => $totalRecommendedByNow,
             'dailyIdealUsage' => round($dailyIdealUsage, 2),
             'dailyRecommendationLine' => $dailyRecommendationLine,
+            'endOfDayUsage' => round($endOfDayUsage, 2),
+            'endOfDayPercentageLeft' => $endOfDayPercentageLeft,
         ];
     }
 
