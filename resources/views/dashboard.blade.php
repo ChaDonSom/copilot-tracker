@@ -336,7 +336,6 @@
                 {{-- Percentage used / left --}}
                 <div class="hero-card" data-stat="percent-used">
                     <div class="label">Percentage Used</div>
-                    @php $percentUsed = $snapshot->quota_limit > 0 ? round(($snapshot->used / $snapshot->quota_limit) * 100, 1) : round(100 - $snapshot->percent_remaining, 1); @endphp
                     <div class="big-value {{ $percentUsed > 75 ? 'color-red' : ($percentUsed > 50 ? 'color-orange' : 'color-blue') }}">
                         {{ number_format($percentUsed, 1) }}%
                     </div>
@@ -350,7 +349,7 @@
                 <div class="stat-card" data-stat="daily-recommended">
                     <div class="stat-label">Recommended / Day</div>
                     <div class="stat-value">{{ number_format($recommendation['dailyRecommended']) }}</div>
-                    <div class="stat-sub">requests/day · {{ number_format($recommendation['daysRemaining']) }} days left</div>
+                    <div class="stat-sub">requests/day · {{ number_format($recommendation['daysRemaining']) }} day{{ $recommendation['daysRemaining'] != 1 ? 's' : '' }} left</div>
                 </div>
                 @endif
 
@@ -393,13 +392,7 @@
                         </div>
                         {{-- Navigation --}}
                         <button class="nav-btn" id="chartPrev" title="Previous period">◀</button>
-                        <span class="range-label" id="rangeLabel">
-                            @if($chartOffset == 0)
-                                Last {{ $chartRange }} day{{ $chartRange > 1 ? 's' : '' }}
-                            @else
-                                {{ now()->subDays(($chartOffset + 1) * $chartRange)->format('M d') }} – {{ now()->subDays($chartOffset * $chartRange)->format('M d') }}
-                            @endif
-                        </span>
+                        <span class="range-label" id="rangeLabel">{{ $chartRangeLabel }}</span>
                         <button class="nav-btn" id="chartNext" title="Next period" {{ $chartOffset == 0 ? 'disabled' : '' }}>▶</button>
                     </div>
                 </div>
@@ -685,7 +678,8 @@
                     const v = drCard.querySelector('.stat-value');
                     const sub = drCard.querySelector('.stat-sub');
                     if (v) v.textContent = n(data.recommendation.dailyRecommended).toLocaleString();
-                    if (sub) sub.textContent = 'requests/day · ' + Math.round(n(data.recommendation.daysRemaining)) + ' days left';
+                    const dr = Math.round(n(data.recommendation.daysRemaining));
+                    if (sub) sub.textContent = 'requests/day · ' + dr + ' day' + (dr !== 1 ? 's' : '') + ' left';
                 }
 
                 // Secondary: today used

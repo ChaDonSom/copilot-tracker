@@ -34,6 +34,10 @@ class DashboardController extends Controller
         $viewData['todayUsed'] = $this->calculateTodayUsed($user);
         $viewData['chartRange'] = $rangeDays;
         $viewData['chartOffset'] = $offset;
+        $viewData['chartRangeLabel'] = $this->buildChartRangeLabel($rangeDays, $offset);
+        $viewData['percentUsed'] = $latestSnapshot && $latestSnapshot->quota_limit > 0
+            ? round(($latestSnapshot->used / $latestSnapshot->quota_limit) * 100, 1)
+            : ($latestSnapshot ? round(100 - $latestSnapshot->percent_remaining, 1) : 0);
 
         return view('dashboard', $viewData);
     }
@@ -87,11 +91,25 @@ class DashboardController extends Controller
             return 0;
         }
 
+        // Usage = first snapshot's remaining - last snapshot's remaining
+        // (remaining decreases as requests are consumed)
         $first = $todaySnapshots->first();
         $last = $todaySnapshots->last();
         $used = $first->remaining - $last->remaining;
 
         return max(0, $used);
+    }
+
+    private function buildChartRangeLabel(int $rangeDays, int $offset): string
+    {
+        if ($offset === 0) {
+            return 'Last ' . $rangeDays . ' day' . ($rangeDays > 1 ? 's' : '');
+        }
+
+        $end = now()->subDays($offset * $rangeDays);
+        $start = $end->copy()->subDays($rangeDays);
+
+        return $start->format('M d') . ' – ' . $end->format('M d');
     }
 
     public function chartData(Request $request): JsonResponse
@@ -174,7 +192,7 @@ class DashboardController extends Controller
 
         $resetDate = $snapshot->reset_date;
         $now = now();
-        $daysRemaining = (int) max(1, ceil($now->diffInDays($resetDate, false)));
+        $daysRemaining = (int) ceil(max(1, $now->diffInDays($resetDate, false)));
 
         // Calculate recommended daily usage
         $dailyRecommended = $daysRemaining > 0 ? round($snapshot->remaining / $daysRemaining, 2) : 0;
