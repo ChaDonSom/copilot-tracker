@@ -594,7 +594,7 @@
                     }
                     
                     const endOfDayCard = document.querySelector('[data-stat="end-of-day-percentage"]');
-                    if (endOfDayCard && data.recommendation.endOfDayPercentageLeft !== null && typeof data.recommendation.endOfDayPercentageLeft !== 'undefined' && typeof data.recommendation.endOfDayUsage !== 'undefined') {
+                    if (endOfDayCard && typeof data.recommendation.endOfDayPercentageLeft !== 'undefined' && typeof data.recommendation.endOfDayUsage !== 'undefined' && data.recommendation.endOfDayPercentageLeft !== null) {
                         const valueEl = endOfDayCard.querySelector('.value');
                         const subtitleEl = endOfDayCard.querySelector('.subtitle');
                         const endOfDayPercentageLeft = normalizeNumber(data.recommendation.endOfDayPercentageLeft);
