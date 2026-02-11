@@ -135,14 +135,12 @@ class DashboardController extends Controller
         // Build recommendation line for the chart (cumulative usage trajectory)
         $dailyRecommendationLine = [];
         $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
-        $cycleStart = $resetDateStart->copy()->startOfDay();
 
-        foreach (array_keys($historyByDate->toArray()) as $date) {
-            $currentDate = \Carbon\Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
-            // 1-based day index: same-day diff is 0, so add 1; this also preserves per-day ideal usage on first day
-            $daysFromStart = max(1, $cycleStart->diffInDays($currentDate) + 1);
-            $dailyRecommendationLine[] = round($daysFromStart * $dailyIdealUsage);
-        }
+        $dailyRecommendationLine = array_fill(
+            0,
+            count($historyByDate),
+            round($dailyIdealUsage, 2)
+        );
 
         return [
             'dailyRecommended' => $dailyRecommended,
@@ -206,9 +204,6 @@ class DashboardController extends Controller
         $baselineUsed = $currentTotalUsed - $totalTracked;
 
         $used = array_map(fn($val) => $baselineUsed + $val, $used);
-
-        // Adjust recommendation line similarly to start from the baseline
-        $recommendation = array_map(fn($val) => $baselineUsed + $val, $recommendation);
 
         return [
             'labels' => $labels,
