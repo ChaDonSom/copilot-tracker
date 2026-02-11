@@ -458,6 +458,11 @@
             }
         }
 
+        function normalizeNumber(value, fallback = 0) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
         // Manual refresh function using JSON API
         function refreshDashboard() {
             // Prevent concurrent refresh requests
@@ -487,13 +492,17 @@
                 }
                 
                 const snapshot = data.snapshot;
-                
+                const quotaLimit = normalizeNumber(snapshot.quota_limit);
+                const remaining = normalizeNumber(snapshot.remaining);
+                const percentRemaining = normalizeNumber(snapshot.percent_remaining);
+                const used = normalizeNumber(snapshot.used);
+
                 // Update stat cards using data attributes
                 const totalLimitCard = document.querySelector('[data-stat="total-limit"]');
                 if (totalLimitCard) {
                     const valueEl = totalLimitCard.querySelector('.value');
                     if (valueEl && typeof snapshot.quota_limit !== 'undefined') {
-                        valueEl.textContent = snapshot.quota_limit.toLocaleString();
+                        valueEl.textContent = quotaLimit.toLocaleString();
                     }
                 }
                 
@@ -504,14 +513,15 @@
                     const progressBar = remainingCard.querySelector('.progress-fill');
                     
                     if (valueEl) {
-                        valueEl.textContent = snapshot.remaining.toLocaleString();
+                        valueEl.textContent = remaining.toLocaleString();
                     }
                     if (subtitleEl) {
-                        subtitleEl.textContent = snapshot.percent_remaining.toFixed(1) + '% left';
+                        subtitleEl.textContent = percentRemaining.toFixed(1) + '% left';
                     }
                     if (progressBar) {
-                        progressBar.style.width = snapshot.percent_remaining + '%';
-                        if (snapshot.percent_remaining < 25) {
+                        const widthValue = Math.max(0, Math.min(100, percentRemaining));
+                        progressBar.style.width = widthValue + '%';
+                        if (percentRemaining < 25) {
                             progressBar.classList.add('warning');
                         } else {
                             progressBar.classList.remove('warning');
@@ -525,10 +535,11 @@
                     const subtitleEl = usedCard.querySelector('.subtitle');
                     
                     if (valueEl) {
-                        valueEl.textContent = snapshot.used.toLocaleString();
+                        valueEl.textContent = used.toLocaleString();
                     }
                     if (subtitleEl) {
-                        subtitleEl.textContent = ((snapshot.used / snapshot.quota_limit) * 100).toFixed(1) + '% consumed';
+                        const consumedPercent = quotaLimit > 0 ? ((used / quotaLimit) * 100) : 0;
+                        subtitleEl.textContent = consumedPercent.toFixed(1) + '% consumed';
                     }
                 }
                 
@@ -552,20 +563,23 @@
                     if (dailyRecommendedCard && typeof data.recommendation.dailyRecommended !== 'undefined' && typeof data.recommendation.daysRemaining !== 'undefined') {
                         const valueEl = dailyRecommendedCard.querySelector('.value');
                         const subtitleEl = dailyRecommendedCard.querySelector('.subtitle');
+                        const dailyRecommendedValue = normalizeNumber(data.recommendation.dailyRecommended);
+                        const daysRemaining = Number.isFinite(Number(data.recommendation.daysRemaining)) ? Number(data.recommendation.daysRemaining) : 0;
                         
                         if (valueEl) {
-                            valueEl.textContent = data.recommendation.dailyRecommended.toLocaleString();
+                            valueEl.textContent = dailyRecommendedValue.toLocaleString();
                         }
                         if (subtitleEl) {
-                            subtitleEl.textContent = 'requests/day for ' + data.recommendation.daysRemaining + ' days';
+                            subtitleEl.textContent = 'requests/day for ' + daysRemaining + ' days';
                         }
                     }
                     
                     const idealDailyRateCard = document.querySelector('[data-stat="ideal-daily-rate"]');
                     if (idealDailyRateCard && typeof data.recommendation.dailyIdealUsage !== 'undefined') {
                         const valueEl = idealDailyRateCard.querySelector('.value');
+                        const idealDailyRateValue = normalizeNumber(data.recommendation.dailyIdealUsage);
                         if (valueEl) {
-                            valueEl.textContent = data.recommendation.dailyIdealUsage.toLocaleString();
+                            valueEl.textContent = idealDailyRateValue.toLocaleString();
                         }
                     }
                 }

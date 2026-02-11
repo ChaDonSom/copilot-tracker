@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\UsageSnapshot;
 use App\Services\GitHubCopilotService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,7 +55,10 @@ class DashboardController extends Controller
             ->orderBy('checked_at', 'asc')
             ->get();
 
-        return response()->json($this->prepareChartDataFromHistory($history, $latestSnapshot, $user));
+        $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot, $user);
+        $viewData['snapshot'] = $this->snapshotToArray($viewData['snapshot']);
+
+        return response()->json($viewData);
     }
 
     private function prepareChartDataFromHistory($history, $latestSnapshot, $user): array
@@ -211,6 +215,18 @@ class DashboardController extends Controller
             'timestamps' => $timestamps,
             'used' => $used,
             'recommendation' => $recommendation,
+        ];
+    }
+
+    private function snapshotToArray(UsageSnapshot $snapshot): array
+    {
+        return [
+            'quota_limit' => (int) $snapshot->quota_limit,
+            'remaining' => (int) $snapshot->remaining,
+            'used' => (int) $snapshot->used,
+            'percent_remaining' => (float) $snapshot->percent_remaining,
+            'reset_date' => $snapshot->reset_date?->toIso8601String(),
+            'checked_at' => $snapshot->checked_at?->toIso8601String(),
         ];
     }
 }
