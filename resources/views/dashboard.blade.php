@@ -399,7 +399,8 @@
                 @if(count($chartData['labels']) > 0 || count($perCheckData['timestamps'] ?? []) > 0)
                     <canvas id="usageChart"></canvas>
                 @else
-                    <div class="no-data">
+                    <canvas id="usageChart" style="display:none"></canvas>
+                    <div class="no-data" id="noDataMsg">
                         No data for this period. Try a different range or navigate to another period.
                     </div>
                 @endif
@@ -416,8 +417,7 @@
         let isRefreshing = false;
         let isFetchingChart = false;
 
-        // -------- Chart setup --------
-        @if(count($chartData['labels']) > 0 || count($perCheckData['timestamps'] ?? []) > 0)
+        // -------- Chart setup (always initialized) --------
         const ctx = document.getElementById('usageChart').getContext('2d');
 
         const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
@@ -502,6 +502,27 @@
             }
         });
 
+        function toggleChartVisibility(hasData) {
+            const canvas = document.getElementById('usageChart');
+            const noDataMsg = document.getElementById('noDataMsg');
+            if (hasData) {
+                canvas.style.display = '';
+                if (noDataMsg) noDataMsg.style.display = 'none';
+            } else {
+                canvas.style.display = 'none';
+                if (noDataMsg) {
+                    noDataMsg.style.display = '';
+                } else {
+                    // Create no-data message if it doesn't exist yet
+                    const msg = document.createElement('div');
+                    msg.className = 'no-data';
+                    msg.id = 'noDataMsg';
+                    msg.textContent = 'No data for this period. Try a different range or navigate to another period.';
+                    canvas.parentNode.appendChild(msg);
+                }
+            }
+        }
+
         function applyViewToChart() {
             if (currentView === 'daily') {
                 chart.data = dailyData;
@@ -527,7 +548,6 @@
                 applyViewToChart();
             });
         });
-        @endif
 
         // -------- Range & Navigation --------
         function updateRangeLabel() {
@@ -545,6 +565,26 @@
             if (nextBtn) nextBtn.disabled = (chartOffset === 0);
         }
 
+        function updateChartFromData(data) {
+            const hasDaily = data.chartData && data.chartData.labels && data.chartData.labels.length > 0;
+            const hasPerCheck = data.perCheckData && data.perCheckData.timestamps && data.perCheckData.timestamps.length > 0;
+
+            if (data.chartData) {
+                dailyData.labels = data.chartData.labels;
+                dailyData.datasets[0].data = data.chartData.used;
+                dailyData.datasets[1].data = data.chartData.recommendation;
+            }
+            if (data.perCheckData && data.perCheckData.timestamps) {
+                perCheckData.datasets[0].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.used[i] }));
+                perCheckData.datasets[1].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.recommendation[i] }));
+            }
+
+            toggleChartVisibility(hasDaily || hasPerCheck);
+            if (hasDaily || hasPerCheck) {
+                applyViewToChart();
+            }
+        }
+
         function fetchChartData() {
             if (isFetchingChart) return;
             isFetchingChart = true;
@@ -552,20 +592,12 @@
             fetch('{{ route('dashboard.chart-data') }}?range=' + chartRange + '&offset=' + chartOffset, {
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('Server error: ' + r.status + ' ' + r.statusText);
+                return r.json();
+            })
             .then(data => {
-                @if(count($chartData['labels']) > 0 || count($perCheckData['timestamps'] ?? []) > 0)
-                if (data.chartData) {
-                    dailyData.labels = data.chartData.labels;
-                    dailyData.datasets[0].data = data.chartData.used;
-                    dailyData.datasets[1].data = data.chartData.recommendation;
-                }
-                if (data.perCheckData && data.perCheckData.timestamps) {
-                    perCheckData.datasets[0].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.used[i] }));
-                    perCheckData.datasets[1].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.recommendation[i] }));
-                }
-                applyViewToChart();
-                @endif
+                updateChartFromData(data);
                 updateRangeLabel();
                 isFetchingChart = false;
             })
@@ -619,10 +651,16 @@
                 },
                 body: JSON.stringify({ range: chartRange, offset: chartOffset })
             })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('Server error: ' + r.status + ' ' + r.statusText);
+                return r.json();
+            })
             .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 if (!data.snapshot || typeof data.snapshot.quota_limit === 'undefined') {
-                    throw new Error('Invalid response');
+                    throw new Error('Invalid response: missing snapshot data');
                 }
 
                 const s = data.snapshot;
@@ -707,18 +745,7 @@
                 }
 
                 // Chart
-                @if(count($chartData['labels']) > 0 || count($perCheckData['timestamps'] ?? []) > 0)
-                if (data.chartData) {
-                    dailyData.labels = data.chartData.labels;
-                    dailyData.datasets[0].data = data.chartData.used;
-                    dailyData.datasets[1].data = data.chartData.recommendation;
-                }
-                if (data.perCheckData && data.perCheckData.timestamps) {
-                    perCheckData.datasets[0].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.used[i] }));
-                    perCheckData.datasets[1].data = data.perCheckData.timestamps.map((t, i) => ({ x: t, y: data.perCheckData.recommendation[i] }));
-                }
-                applyViewToChart();
-                @endif
+                updateChartFromData(data);
 
                 isRefreshing = false;
                 btn.disabled = false;
@@ -729,7 +756,7 @@
                 isRefreshing = false;
                 btn.disabled = false;
                 btn.textContent = '🔄 Refresh';
-                alert('Failed to refresh. Please try again.');
+                alert('Failed to refresh: ' + err.message);
             });
         }
 

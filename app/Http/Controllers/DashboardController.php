@@ -14,6 +14,9 @@ class DashboardController extends Controller
         private GitHubCopilotService $githubService
     ) {}
 
+    private const ALLOWED_RANGES = [1, 7, 30];
+    private const MAX_OFFSET = 52; // ~1.5 years back at 30-day range
+
     public function index(Request $request): View
     {
         $user = $request->user();
@@ -24,9 +27,8 @@ class DashboardController extends Controller
             $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
         }
 
-        // Chart range params
-        $rangeDays = (int) $request->input('range', 30);
-        $offset = (int) $request->input('offset', 0);
+        // Chart range params (validated)
+        [$rangeDays, $offset] = $this->validateRangeParams($request);
 
         $history = $this->getHistoryForRange($user, $rangeDays, $offset);
 
@@ -56,9 +58,8 @@ class DashboardController extends Controller
             ], 500);
         }
 
-        // Chart range params
-        $rangeDays = (int) $request->input('range', 30);
-        $offset = (int) $request->input('offset', 0);
+        // Chart range params (validated)
+        [$rangeDays, $offset] = $this->validateRangeParams($request);
 
         $history = $this->getHistoryForRange($user, $rangeDays, $offset);
 
@@ -73,31 +74,37 @@ class DashboardController extends Controller
 
     private function getHistoryForRange($user, int $rangeDays, int $offset)
     {
-        $end = now()->subDays($offset * $rangeDays);
-        $start = $end->copy()->subDays($rangeDays);
+        [$start, $end] = $this->calculateDateRange($rangeDays, $offset);
 
         return $user->usageSnapshots()
             ->where('checked_at', '>=', $start)
-            ->where('checked_at', '<=', $end)
+            ->where('checked_at', '<', $end)
             ->orderBy('checked_at', 'asc')
             ->get();
     }
 
-    private function calculateTodayUsed($user): int
+    /**
+     * Calculate usage from a collection of snapshots by taking the difference
+     * between the first and last "remaining" values, clamped at 0.
+     */
+    private function calculateUsageFromSnapshots($snapshots): int
     {
-        $todaySnapshots = $user->todaySnapshots()->get();
-
-        if ($todaySnapshots->count() < 2) {
+        if ($snapshots->count() < 2) {
             return 0;
         }
 
         // Usage = first snapshot's remaining - last snapshot's remaining
         // (remaining decreases as requests are consumed)
-        $first = $todaySnapshots->first();
-        $last = $todaySnapshots->last();
+        $first = $snapshots->first();
+        $last = $snapshots->last();
         $used = $first->remaining - $last->remaining;
 
         return max(0, $used);
+    }
+
+    private function calculateTodayUsed($user): int
+    {
+        return $this->calculateUsageFromSnapshots($user->todaySnapshots()->get());
     }
 
     private function buildChartRangeLabel(int $rangeDays, int $offset): string
@@ -106,10 +113,33 @@ class DashboardController extends Controller
             return 'Last ' . $rangeDays . ' day' . ($rangeDays > 1 ? 's' : '');
         }
 
-        $end = now()->subDays($offset * $rangeDays);
-        $start = $end->copy()->subDays($rangeDays);
+        [$start, $end] = $this->calculateDateRange($rangeDays, $offset);
 
         return $start->format('M d') . ' – ' . $end->format('M d');
+    }
+
+    /**
+     * Calculate the calendar-day-aligned start and end dates for a given range and offset.
+     * Returns [startOfDay, startOfNextDay) so the upper bound is exclusive.
+     */
+    private function calculateDateRange(int $rangeDays, int $offset): array
+    {
+        $end = now()->subDays($offset * $rangeDays)->addDay()->startOfDay();
+        $start = $end->copy()->subDays($rangeDays);
+
+        return [$start, $end];
+    }
+
+    private function validateRangeParams(Request $request): array
+    {
+        $rangeDays = (int) $request->input('range', 30);
+        if (!in_array($rangeDays, self::ALLOWED_RANGES, true)) {
+            $rangeDays = 30;
+        }
+
+        $offset = max(0, min(self::MAX_OFFSET, (int) $request->input('offset', 0)));
+
+        return [$rangeDays, $offset];
     }
 
     public function chartData(Request $request): JsonResponse
@@ -117,8 +147,7 @@ class DashboardController extends Controller
         $user = $request->user();
         $latestSnapshot = $user->latestSnapshot();
 
-        $rangeDays = (int) $request->input('range', 30);
-        $offset = (int) $request->input('offset', 0);
+        [$rangeDays, $offset] = $this->validateRangeParams($request);
 
         $history = $this->getHistoryForRange($user, $rangeDays, $offset);
         $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot, $user);
