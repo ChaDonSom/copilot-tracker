@@ -10,6 +10,7 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+Route::get('/login', [AuthController::class, 'redirectToGithub'])->name('login');
 Route::get('/login/github', [AuthController::class, 'redirectToGithub'])->name('login.github');
 Route::get('/login/github/callback', [AuthController::class, 'handleGithubCallback']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
