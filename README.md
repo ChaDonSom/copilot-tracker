@@ -129,11 +129,11 @@ Deployment takes approximately 40-60 seconds.
 ### Dashboard Features
 
 - **Current Usage Stats** - See your quota limit, remaining requests, and usage percentage
-- **Usage Trend Graph** - 30-day historical view showing:
+- **Usage Trend Graph** - Historical view showing:
   - Daily requests used
-  - Remaining requests over time
+  - Recommended usage (target usage over time)
 - **Visual Warnings** - Color-coded progress bars warn when running low on quota
-- **Auto-Refresh** - Click refresh to get latest data from GitHub
+- **Auto-Refresh** - Dashboard data auto-refreshes every 5 minutes (only when tab is visible), with optional manual refresh
 
 ## API Endpoints
 

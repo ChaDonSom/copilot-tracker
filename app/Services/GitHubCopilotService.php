@@ -110,7 +110,18 @@ class GitHubCopilotService
      */
     public function checkAndStoreUsage(User $user): ?UsageSnapshot
     {
-        $result = $this->fetchUsage($user->github_token);
+        // Prefer OAuth token if available, fall back to PAT
+        $token = $user->github_oauth_token ?? $user->github_token;
+        
+        if (!$token) {
+            Log::warning('No GitHub token available for user', [
+                'user_id' => $user->id,
+                'username' => $user->github_username,
+            ]);
+            return null;
+        }
+
+        $result = $this->fetchUsage($token);
 
         if (!$result['success']) {
             Log::warning('Failed to fetch usage for user', [

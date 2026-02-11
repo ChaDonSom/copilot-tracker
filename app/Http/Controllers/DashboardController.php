@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\UsageSnapshot;
 use App\Services\GitHubCopilotService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -42,13 +42,23 @@ class DashboardController extends Controller
         // Force a fresh check from GitHub API
         $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
 
+        // If the API call failed, return an error
+        if (!$latestSnapshot) {
+            return response()->json([
+                'error' => 'Failed to fetch usage data from GitHub. Please try again later.'
+            ], 500);
+        }
+
         // Get historical data for chart (last 30 days)
         $history = $user->usageSnapshots()
             ->where('checked_at', '>=', now()->subDays(30))
             ->orderBy('checked_at', 'asc')
             ->get();
 
-        return response()->json($this->prepareChartDataFromHistory($history, $latestSnapshot, $user));
+        $viewData = $this->prepareChartDataFromHistory($history, $latestSnapshot, $user);
+        $viewData['snapshot'] = $this->snapshotToArray($viewData['snapshot']);
+
+        return response()->json($viewData);
     }
 
     private function prepareChartDataFromHistory($history, $latestSnapshot, $user): array
@@ -125,14 +135,12 @@ class DashboardController extends Controller
         // Build recommendation line for the chart (cumulative usage trajectory)
         $dailyRecommendationLine = [];
         $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
-        $cycleStart = $resetDateStart->copy()->startOfDay();
 
-        foreach (array_keys($historyByDate->toArray()) as $date) {
-            $currentDate = \Carbon\Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
-            // 1-based day index: same-day diff is 0, so add 1; this also preserves per-day ideal usage on first day
-            $daysFromStart = max(1, $cycleStart->diffInDays($currentDate) + 1);
-            $dailyRecommendationLine[] = round($daysFromStart * $dailyIdealUsage);
-        }
+        $dailyRecommendationLine = array_fill(
+            0,
+            count($historyByDate),
+            round($dailyIdealUsage, 2)
+        );
 
         return [
             'dailyRecommended' => $dailyRecommended,
@@ -146,14 +154,20 @@ class DashboardController extends Controller
     private function preparePerCheckData($history)
     {
         $labels = [];
+        $timestamps = [];
         $used = [];
         $recommendation = [];
 
         $cumulativeUsed = 0;
         $firstSnapshot = $history->first();
+        $lastSnapshot = $history->last();
+
+        // Calculate the current total used from the latest snapshot
+        $currentTotalUsed = $lastSnapshot ? $lastSnapshot->used : 0;
 
         foreach ($history as $index => $snapshot) {
             $labels[] = $snapshot->checked_at->format('M d H:i');
+            $timestamps[] = $snapshot->checked_at->toIso8601String();
 
             if ($index === 0) {
                 $used[] = 0;
@@ -161,7 +175,9 @@ class DashboardController extends Controller
                 $prevSnapshot = $history[$index - 1];
                 $delta = $prevSnapshot->remaining - $snapshot->remaining;
                 if ($delta < 0) {
-                    $delta = 0; // Quota reset
+                    // Quota reset detected - reset tracking to prevent negative baseline
+                    $cumulativeUsed = 0;
+                    $delta = 0;
                 }
                 $cumulativeUsed += $delta;
                 $used[] = $cumulativeUsed;
@@ -184,10 +200,30 @@ class DashboardController extends Controller
             }
         }
 
+        // Adjust the used values to reflect actual position: currentTotalUsed - cumulativeUsed to currentTotalUsed
+        // This means we're showing from (currentTotalUsed - totalTracked) to currentTotalUsed
+        $totalTracked = $cumulativeUsed;
+        $baselineUsed = $currentTotalUsed - $totalTracked;
+
+        $used = array_map(fn($val) => $baselineUsed + $val, $used);
+
         return [
             'labels' => $labels,
+            'timestamps' => $timestamps,
             'used' => $used,
             'recommendation' => $recommendation,
+        ];
+    }
+
+    private function snapshotToArray(UsageSnapshot $snapshot): array
+    {
+        return [
+            'quota_limit' => (int) $snapshot->quota_limit,
+            'remaining' => (int) $snapshot->remaining,
+            'used' => (int) $snapshot->used,
+            'percent_remaining' => (float) $snapshot->percent_remaining,
+            'reset_date' => $snapshot->reset_date?->toIso8601String(),
+            'checked_at' => $snapshot->checked_at?->toIso8601String(),
         ];
     }
 }

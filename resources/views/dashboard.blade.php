@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GitHub Copilot Usage Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -267,7 +268,13 @@
                 <div class="stat-card" data-stat="used">
                     <h3>Used This Month</h3>
                     <div class="value">{{ number_format($snapshot->used) }}</div>
-                    <div class="subtitle">{{ number_format((($snapshot->used / $snapshot->quota_limit) * 100), 1) }}% consumed</div>
+                    <div class="subtitle">
+                        @if($snapshot->quota_limit > 0)
+                            {{ number_format((($snapshot->used / $snapshot->quota_limit) * 100), 1) }}% consumed
+                        @else
+                            {{ number_format(100 - $snapshot->percent_remaining, 1) }}% consumed
+                        @endif
+                    </div>
                 </div>
 
                 <div class="stat-card" data-stat="resets-on">
@@ -347,11 +354,10 @@
 
         // Per-check view data
         const perCheckData = {
-            labels: {!! json_encode($perCheckData['labels']) !!},
             datasets: [
                 {
                     label: 'Cumulative Requests Used',
-                    data: {!! json_encode($perCheckData['used']) !!},
+                    data: {!! json_encode(array_map(fn($timestamp, $value) => ['x' => $timestamp, 'y' => $value], $perCheckData['timestamps'], $perCheckData['used'])) !!},
                     borderColor: 'rgb(102, 126, 234)',
                     backgroundColor: gradient1,
                     fill: true,
@@ -359,7 +365,7 @@
                 },
                 {
                     label: 'Recommended Usage',
-                    data: {!! json_encode($perCheckData['recommendation']) !!},
+                    data: {!! json_encode(array_map(fn($timestamp, $value) => ['x' => $timestamp, 'y' => $value], $perCheckData['timestamps'], $perCheckData['recommendation'])) !!},
                     borderColor: 'rgb(255, 159, 64)',
                     backgroundColor: 'transparent',
                     borderDash: [5, 5],
@@ -418,8 +424,19 @@
                 currentView = this.dataset.view;
                 if (currentView === 'daily') {
                     chart.data = dailyData;
+                    // Reset x-axis to category scale
+                    chart.options.scales.x.type = 'category';
                 } else {
                     chart.data = perCheckData;
+                    // Switch to time scale for per-check view
+                    chart.options.scales.x.type = 'time';
+                    chart.options.scales.x.time = {
+                        displayFormats: {
+                            hour: 'MMM d HH:mm',
+                            day: 'MMM d'
+                        },
+                        tooltipFormat: 'MMM d, yyyy HH:mm'
+                    };
                 }
                 chart.update();
             });
@@ -439,6 +456,11 @@
             } else {
                 return 'today';
             }
+        }
+
+        function normalizeNumber(value, fallback = 0) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
         }
 
         // Manual refresh function using JSON API
@@ -470,13 +492,17 @@
                 }
                 
                 const snapshot = data.snapshot;
-                
+                const quotaLimit = normalizeNumber(snapshot.quota_limit);
+                const remaining = normalizeNumber(snapshot.remaining);
+                const percentRemaining = normalizeNumber(snapshot.percent_remaining);
+                const used = normalizeNumber(snapshot.used);
+
                 // Update stat cards using data attributes
                 const totalLimitCard = document.querySelector('[data-stat="total-limit"]');
                 if (totalLimitCard) {
                     const valueEl = totalLimitCard.querySelector('.value');
                     if (valueEl && typeof snapshot.quota_limit !== 'undefined') {
-                        valueEl.textContent = snapshot.quota_limit.toLocaleString();
+                        valueEl.textContent = quotaLimit.toLocaleString();
                     }
                 }
                 
@@ -487,14 +513,15 @@
                     const progressBar = remainingCard.querySelector('.progress-fill');
                     
                     if (valueEl) {
-                        valueEl.textContent = snapshot.remaining.toLocaleString();
+                        valueEl.textContent = remaining.toLocaleString();
                     }
                     if (subtitleEl) {
-                        subtitleEl.textContent = snapshot.percent_remaining.toFixed(1) + '% left';
+                        subtitleEl.textContent = percentRemaining.toFixed(1) + '% left';
                     }
                     if (progressBar) {
-                        progressBar.style.width = snapshot.percent_remaining + '%';
-                        if (snapshot.percent_remaining < 25) {
+                        const widthValue = Math.max(0, Math.min(100, percentRemaining));
+                        progressBar.style.width = widthValue + '%';
+                        if (percentRemaining < 25) {
                             progressBar.classList.add('warning');
                         } else {
                             progressBar.classList.remove('warning');
@@ -508,10 +535,13 @@
                     const subtitleEl = usedCard.querySelector('.subtitle');
                     
                     if (valueEl) {
-                        valueEl.textContent = snapshot.used.toLocaleString();
+                        valueEl.textContent = used.toLocaleString();
                     }
                     if (subtitleEl) {
-                        subtitleEl.textContent = ((snapshot.used / snapshot.quota_limit) * 100).toFixed(1) + '% consumed';
+                        const consumedPercent = quotaLimit > 0
+                            ? ((used / quotaLimit) * 100)
+                            : (typeof percentRemaining === 'number' ? 100 - percentRemaining : 0);
+                        subtitleEl.textContent = consumedPercent.toFixed(1) + '% consumed';
                     }
                 }
                 
@@ -535,20 +565,23 @@
                     if (dailyRecommendedCard && typeof data.recommendation.dailyRecommended !== 'undefined' && typeof data.recommendation.daysRemaining !== 'undefined') {
                         const valueEl = dailyRecommendedCard.querySelector('.value');
                         const subtitleEl = dailyRecommendedCard.querySelector('.subtitle');
+                        const dailyRecommendedValue = normalizeNumber(data.recommendation.dailyRecommended);
+                        const daysRemaining = Number.isFinite(Number(data.recommendation.daysRemaining)) ? Number(data.recommendation.daysRemaining) : 0;
                         
                         if (valueEl) {
-                            valueEl.textContent = data.recommendation.dailyRecommended.toLocaleString();
+                            valueEl.textContent = dailyRecommendedValue.toLocaleString();
                         }
                         if (subtitleEl) {
-                            subtitleEl.textContent = 'requests/day for ' + data.recommendation.daysRemaining + ' days';
+                            subtitleEl.textContent = 'requests/day for ' + daysRemaining + ' days';
                         }
                     }
                     
                     const idealDailyRateCard = document.querySelector('[data-stat="ideal-daily-rate"]');
                     if (idealDailyRateCard && typeof data.recommendation.dailyIdealUsage !== 'undefined') {
                         const valueEl = idealDailyRateCard.querySelector('.value');
+                        const idealDailyRateValue = normalizeNumber(data.recommendation.dailyIdealUsage);
                         if (valueEl) {
-                            valueEl.textContent = data.recommendation.dailyIdealUsage.toLocaleString();
+                            valueEl.textContent = idealDailyRateValue.toLocaleString();
                         }
                     }
                 }
@@ -559,19 +592,35 @@
                     dailyData.labels = data.chartData.labels;
                     dailyData.datasets[0].data = data.chartData.used;
                     dailyData.datasets[1].data = data.chartData.recommendation;
-                    
-                    // Update per-check data
-                    perCheckData.labels = data.perCheckData.labels;
-                    perCheckData.datasets[0].data = data.perCheckData.used;
-                    perCheckData.datasets[1].data = data.perCheckData.recommendation;
-                    
+
+                    // Update per-check data with timestamps
+                    if (data.perCheckData.timestamps && data.perCheckData.used) {
+                        perCheckData.datasets[0].data = data.perCheckData.timestamps.map((timestamp, index) => ({
+                            x: timestamp,
+                            y: data.perCheckData.used[index]
+                        }));
+                        perCheckData.datasets[1].data = data.perCheckData.timestamps.map((timestamp, index) => ({
+                            x: timestamp,
+                            y: data.perCheckData.recommendation[index]
+                        }));
+                    }
+
                     // Restore the current view state
                     if (currentView === 'daily') {
                         chart.data = dailyData;
+                        chart.options.scales.x.type = 'category';
                     } else {
                         chart.data = perCheckData;
+                        chart.options.scales.x.type = 'time';
+                        chart.options.scales.x.time = {
+                            displayFormats: {
+                                hour: 'MMM d HH:mm',
+                                day: 'MMM d'
+                            },
+                            tooltipFormat: 'MMM d, yyyy HH:mm'
+                        };
                     }
-                    
+
                     // Update current chart
                     chart.update();
                 }
@@ -593,10 +642,14 @@
         // Attach refresh handler to button
         document.getElementById('refreshBtn').addEventListener('click', refreshDashboard);
 
-        // Auto-refresh every 5 minutes - set up only once
+        // Auto-refresh every 5 minutes - only when tab is visible
         setInterval(() => {
-            console.log('Auto-refreshing dashboard...');
-            refreshDashboard();
+            if (document.visibilityState === 'visible') {
+                console.log('Auto-refreshing dashboard...');
+                refreshDashboard();
+            } else {
+                console.log('Tab not visible, skipping auto-refresh');
+            }
         }, 5 * 60 * 1000);
     </script>
     @else
