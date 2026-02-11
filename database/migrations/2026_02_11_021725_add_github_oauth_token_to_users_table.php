@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->text('github_oauth_token')->nullable()->after('github_token');
+            $table->text('github_token')->nullable()->change();
         });
     }
 

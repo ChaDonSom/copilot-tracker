@@ -175,7 +175,9 @@ class DashboardController extends Controller
                 $prevSnapshot = $history[$index - 1];
                 $delta = $prevSnapshot->remaining - $snapshot->remaining;
                 if ($delta < 0) {
-                    $delta = 0; // Quota reset
+                    // Quota reset detected - reset tracking to prevent negative baseline
+                    $cumulativeUsed = 0;
+                    $delta = 0;
                 }
                 $cumulativeUsed += $delta;
                 $used[] = $cumulativeUsed;

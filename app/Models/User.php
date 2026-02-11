@@ -34,14 +34,22 @@ class User extends Authenticatable
         ];
     }
 
-    public function setGithubTokenAttribute(string $value): void
+    public function setGithubTokenAttribute(?string $value): void
     {
-        $this->attributes['github_token'] = Crypt::encryptString($value);
+        $this->attributes['github_token'] = $value ? Crypt::encryptString($value) : null;
     }
 
-    public function getGithubTokenAttribute(string $value): string
+    public function getGithubTokenAttribute(?string $value): ?string
     {
-        return Crypt::decryptString($value);
+        return $value ? Crypt::decryptString($value) : null;
+    }
+
+    /**
+     * Get the active GitHub token, preferring OAuth token over PAT.
+     */
+    public function getActiveGithubToken(): ?string
+    {
+        return $this->github_oauth_token ?? $this->github_token;
     }
 
     public function setGithubOauthTokenAttribute(?string $value): void

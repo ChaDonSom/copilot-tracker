@@ -538,12 +538,9 @@
                         valueEl.textContent = used.toLocaleString();
                     }
                     if (subtitleEl) {
-                        const rawConsumedPercent = quotaLimit > 0
-                            ? (used / quotaLimit) * 100
-                            : (typeof snapshot.percent_remaining === 'number'
-                                ? 100 - snapshot.percent_remaining
-                                : 0);
-                        const consumedPercent = Math.max(0, Math.min(100, rawConsumedPercent));
+                        const consumedPercent = quotaLimit > 0
+                            ? ((used / quotaLimit) * 100)
+                            : (typeof percentRemaining === 'number' ? 100 - percentRemaining : 0);
                         subtitleEl.textContent = consumedPercent.toFixed(1) + '% consumed';
                     }
                 }
