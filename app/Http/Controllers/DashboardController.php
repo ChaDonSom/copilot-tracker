@@ -40,6 +40,8 @@ class DashboardController extends Controller
         $viewData['percentUsed'] = $latestSnapshot && $latestSnapshot->quota_limit > 0
             ? round(($latestSnapshot->used / $latestSnapshot->quota_limit) * 100, 1)
             : ($latestSnapshot ? round(100 - $latestSnapshot->percent_remaining, 1) : 0);
+        $viewData['paceStatus'] = $this->calculatePaceStatus($latestSnapshot);
+        $viewData['lastCheckedAt'] = $latestSnapshot?->checked_at;
 
         return view('dashboard', $viewData);
     }
@@ -68,6 +70,8 @@ class DashboardController extends Controller
         $viewData['todayUsed'] = $this->calculateTodayUsed($user);
         $viewData['chartRange'] = $rangeDays;
         $viewData['chartOffset'] = $offset;
+        $viewData['paceStatus'] = $this->calculatePaceStatus($latestSnapshot);
+        $viewData['lastCheckedAt'] = $latestSnapshot->checked_at?->toIso8601String();
 
         return response()->json($viewData);
     }
@@ -323,6 +327,56 @@ class DashboardController extends Controller
             'timestamps' => $timestamps,
             'used' => $used,
             'recommendation' => $recommendation,
+        ];
+    }
+
+    /**
+     * Calculate the user's usage pace status relative to ideal trajectory.
+     * Returns pace difference (positive = under pace/good, negative = over pace/warning).
+     */
+    private function calculatePaceStatus($snapshot): ?array
+    {
+        if (!$snapshot || !$snapshot->quota_limit || $snapshot->quota_limit <= 0) {
+            return null;
+        }
+
+        $resetDate = $snapshot->reset_date;
+        $now = now();
+
+        // Calculate cycle boundaries
+        $cycleStart = $resetDate->copy()->subDays(30); // Assuming 30-day cycle
+        $totalDaysInCycle = 30;
+        $daysPassed = max(0, $cycleStart->diffInDays($now, false));
+
+        // Add fractional day for current time, clamped to cycle length
+        $hoursToday = $now->hour + ($now->minute / 60);
+        $totalElapsedDays = min($totalDaysInCycle, $daysPassed + ($hoursToday / 24));
+
+        // Calculate ideal usage at this point in the cycle
+        $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
+        $idealUsedByNow = round($totalElapsedDays * $dailyIdealUsage);
+
+        // Actual usage
+        $actualUsed = $snapshot->used;
+
+        // Difference: positive means under pace (good), negative means over pace (warning)
+        $paceDifference = $idealUsedByNow - $actualUsed;
+
+        // Determine status label
+        $threshold = max(1, round($dailyIdealUsage * 0.1)); // 10% of daily ideal as "on pace" zone
+        if (abs($paceDifference) <= $threshold) {
+            $status = 'on-pace';
+        } elseif ($paceDifference > 0) {
+            $status = 'under-pace';
+        } else {
+            $status = 'over-pace';
+        }
+
+        return [
+            'status' => $status,
+            'difference' => (int) $paceDifference,
+            'idealUsedByNow' => (int) $idealUsedByNow,
+            'actualUsed' => (int) $actualUsed,
         ];
     }
 

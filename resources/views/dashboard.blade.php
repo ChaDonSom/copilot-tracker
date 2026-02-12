@@ -289,6 +289,11 @@
         <h1>🚀 Copilot Usage</h1>
         <div class="topbar-right">
             <span>{{ $user->github_username }}@if($user->copilot_plan) · {{ $user->copilot_plan }}@endif</span>
+            @if($lastCheckedAt)
+            <span id="lastChecked" data-checked-at="{{ $lastCheckedAt->toIso8601String() }}" title="Last updated: {{ $lastCheckedAt->format('M d, Y H:i:s') }}">
+                🕐 {{ $lastCheckedAt->diffForHumans() }}
+            </span>
+            @endif
             <button id="refreshBtn" class="btn btn-light">🔄 Refresh</button>
             <form method="POST" action="{{ route('logout') }}" style="display:inline">
                 @csrf
@@ -358,6 +363,30 @@
                     <div class="stat-value">{{ number_format($todayUsed) }}</div>
                     <div class="stat-sub">requests so far today</div>
                 </div>
+
+                @if($paceStatus)
+                <div class="stat-card" data-stat="pace-status">
+                    <div class="stat-label">Usage Pace</div>
+                    <div class="stat-value {{ $paceStatus['status'] === 'over-pace' ? 'color-red' : ($paceStatus['status'] === 'on-pace' ? 'color-green' : 'color-blue') }}">
+                        @if($paceStatus['status'] === 'on-pace')
+                            ✓ On Pace
+                        @elseif($paceStatus['status'] === 'under-pace')
+                            ▼ {{ number_format(abs($paceStatus['difference'])) }}
+                        @else
+                            ▲ {{ number_format(abs($paceStatus['difference'])) }}
+                        @endif
+                    </div>
+                    <div class="stat-sub">
+                        @if($paceStatus['status'] === 'on-pace')
+                            tracking ideal usage rate
+                        @elseif($paceStatus['status'] === 'under-pace')
+                            requests under ideal pace
+                        @else
+                            requests over ideal pace
+                        @endif
+                    </div>
+                </div>
+                @endif
 
                 <div class="stat-card" data-stat="resets-on">
                     <div class="stat-label">Resets On</div>
@@ -744,6 +773,40 @@
                     if (v) v.textContent = n(data.recommendation.dailyIdealUsage).toLocaleString();
                 }
 
+                // Secondary: pace status
+                const psCard = document.querySelector('[data-stat="pace-status"]');
+                if (psCard && data.paceStatus) {
+                    const v = psCard.querySelector('.stat-value');
+                    const sub = psCard.querySelector('.stat-sub');
+                    const ps = data.paceStatus;
+                    if (v) {
+                        if (ps.status === 'on-pace') {
+                            v.textContent = '✓ On Pace';
+                            v.className = 'stat-value color-green';
+                        } else if (ps.status === 'under-pace') {
+                            v.textContent = '▼ ' + Math.abs(ps.difference).toLocaleString();
+                            v.className = 'stat-value color-blue';
+                        } else {
+                            v.textContent = '▲ ' + Math.abs(ps.difference).toLocaleString();
+                            v.className = 'stat-value color-red';
+                        }
+                    }
+                    if (sub) {
+                        if (ps.status === 'on-pace') sub.textContent = 'tracking ideal usage rate';
+                        else if (ps.status === 'under-pace') sub.textContent = 'requests under ideal pace';
+                        else sub.textContent = 'requests over ideal pace';
+                    }
+                }
+
+                // Last checked timestamp
+                const lastCheckedEl = document.getElementById('lastChecked');
+                if (lastCheckedEl && data.lastCheckedAt) {
+                    const checkedDate = new Date(data.lastCheckedAt);
+                    lastCheckedEl.dataset.checkedAt = data.lastCheckedAt;
+                    lastCheckedEl.title = 'Last updated: ' + checkedDate.toLocaleString();
+                    lastCheckedEl.textContent = '🕐 just now';
+                }
+
                 // Chart
                 updateChartFromData(data);
 
@@ -766,6 +829,23 @@
         setInterval(() => {
             if (document.visibilityState === 'visible') refreshDashboard();
         }, 5 * 60 * 1000);
+
+        // Update "last checked" relative time every 30 seconds
+        function updateLastCheckedDisplay() {
+            const el = document.getElementById('lastChecked');
+            if (!el || !el.dataset.checkedAt) return;
+            const checkedAt = new Date(el.dataset.checkedAt);
+            const diffMs = Date.now() - checkedAt.getTime();
+            const diffSec = Math.floor(diffMs / 1000);
+            const diffMin = Math.floor(diffSec / 60);
+            const diffHr = Math.floor(diffMin / 60);
+            let text;
+            if (diffSec < 60) text = 'just now';
+            else if (diffMin < 60) text = diffMin + ' min' + (diffMin === 1 ? '' : 's') + ' ago';
+            else text = diffHr + ' hr' + (diffHr === 1 ? '' : 's') + ' ago';
+            el.textContent = '🕐 ' + text;
+        }
+        setInterval(updateLastCheckedDisplay, 30 * 1000);
     </script>
     @else
     <script>
