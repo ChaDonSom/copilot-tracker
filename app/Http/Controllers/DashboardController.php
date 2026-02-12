@@ -148,7 +148,14 @@ class DashboardController extends Controller
         if ($rangeDays === 0) {
             // For offset=0, show today. For offset=1, show yesterday, etc.
             $start = now($timezone)->subDays($offset)->startOfDay();
-            $end = $start->copy()->endOfDay()->addSecond(); // Exclusive upper bound
+            
+            // If showing today (offset=0), end at current time; otherwise end at end of that day
+            if ($offset === 0) {
+                $end = now($timezone)->addSecond(); // Inclusive of current second
+            } else {
+                $end = $start->copy()->addDay()->startOfDay(); // Start of next day (exclusive)
+            }
+            
             return [$start, $end];
         }
         
