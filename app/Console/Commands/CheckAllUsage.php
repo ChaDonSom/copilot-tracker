@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 class CheckAllUsage extends Command
 {
-    protected $signature = 'copilot:check-usage 
+    protected $signature = 'copilot:check-usage
                             {--user= : Check a specific user by username}
                             {--dry-run : Show what would be checked without actually checking}';
 
@@ -27,7 +27,7 @@ class CheckAllUsage extends Command
         $dryRun = $this->option('dry-run');
 
         $query = User::query();
-        
+
         if ($username) {
             $query->where('github_username', $username);
         }
@@ -36,10 +36,12 @@ class CheckAllUsage extends Command
 
         if ($users->isEmpty()) {
             $this->warn('No users found to check.');
+            Log::warning('[copilot:check-usage] completed - no users found');
             return self::SUCCESS;
         }
 
         $this->info("Checking usage for {$users->count()} user(s)...");
+        Log::info("[copilot:check-usage] checking usage for {$users->count()} user(s)");
 
         $successCount = 0;
         $failCount = 0;

@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -12,5 +13,5 @@ Artisan::command('inspire', function () {
 Schedule::command('copilot:check-usage')
     ->hourly()
     ->withoutOverlapping()
-    ->runInBackground()
-    ->appendOutputTo(storage_path('logs/laravel.log'));
+    ->onSuccess(fn() => Log::info('[copilot:check-usage] scheduled job completed successfully'))
+    ->onFailure(fn() => Log::error('[copilot:check-usage] scheduled job failed'));
