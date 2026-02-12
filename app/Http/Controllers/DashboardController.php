@@ -79,10 +79,12 @@ class DashboardController extends Controller
     private function getHistoryForRange($user, int $rangeDays, int $offset)
     {
         [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
+        $startUtc = $start->copy()->setTimezone('UTC');
+        $endUtc = $end->copy()->setTimezone('UTC');
 
         return $user->usageSnapshots()
-            ->where('checked_at', '>=', $start)
-            ->where('checked_at', '<', $end)
+            ->where('checked_at', '>=', $startUtc)
+            ->where('checked_at', '<', $endUtc)
             ->orderBy('checked_at', 'asc')
             ->get();
     }

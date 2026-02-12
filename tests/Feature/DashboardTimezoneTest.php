@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\UsageSnapshot;
 use App\Services\GitHubCopilotService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -248,5 +249,58 @@ class DashboardTimezoneTest extends TestCase
         
         $response->assertStatus(200);
         $this->assertEquals('Yesterday', $response->viewData('chartRangeLabel'));
+    }
+
+    public function test_today_range_uses_local_midnight_boundary_when_filtering_utc_timestamps(): void
+    {
+        $user = $this->createUserWithTimezone('America/Los_Angeles');
+        Carbon::setTestNow(Carbon::parse('2026-02-12 10:00:00', 'America/Los_Angeles'));
+
+        try {
+            UsageSnapshot::create([
+                'user_id' => $user->id,
+                'quota_limit' => 500,
+                'remaining' => 450,
+                'used' => 50,
+                'percent_remaining' => 90.0,
+                'reset_date' => now()->addDays(15)->toDateString(),
+                'checked_at' => Carbon::parse('2026-02-11 20:00:00', 'America/Los_Angeles')->setTimezone('UTC'),
+            ]);
+
+            UsageSnapshot::create([
+                'user_id' => $user->id,
+                'quota_limit' => 500,
+                'remaining' => 430,
+                'used' => 70,
+                'percent_remaining' => 86.0,
+                'reset_date' => now()->addDays(15)->toDateString(),
+                'checked_at' => Carbon::parse('2026-02-12 00:30:00', 'America/Los_Angeles')->setTimezone('UTC'),
+            ]);
+
+            UsageSnapshot::create([
+                'user_id' => $user->id,
+                'quota_limit' => 500,
+                'remaining' => 410,
+                'used' => 90,
+                'percent_remaining' => 82.0,
+                'reset_date' => now()->addDays(15)->toDateString(),
+                'checked_at' => Carbon::parse('2026-02-12 09:00:00', 'America/Los_Angeles')->setTimezone('UTC'),
+            ]);
+
+            $this->mock(GitHubCopilotService::class);
+
+            $response = $this->actingAs($user)->get('/dashboard?range=0&offset=0');
+            $response->assertStatus(200);
+
+            $timestamps = $response->viewData('perCheckData')['timestamps'];
+            $localDates = array_map(
+                fn ($timestamp) => Carbon::parse($timestamp)->setTimezone('America/Los_Angeles')->toDateString(),
+                $timestamps
+            );
+
+            $this->assertEquals(['2026-02-12', '2026-02-12'], $localDates);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }
