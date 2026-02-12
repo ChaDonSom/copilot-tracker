@@ -134,6 +134,45 @@ Deployment takes approximately 40-60 seconds.
   - Recommended usage (target usage over time)
 - **Visual Warnings** - Color-coded progress bars warn when running low on quota
 - **Auto-Refresh** - Dashboard data auto-refreshes every 5 minutes (only when tab is visible), with optional manual refresh
+- **Timezone Support** - Charts align with your local timezone for accurate day boundaries
+
+### Setting Your Timezone
+
+The dashboard uses your timezone to properly align charts with your start-of-day. By default, all users are set to UTC. To change your timezone:
+
+**Option 1: Using Laravel Tinker (recommended for now)**
+
+```bash
+php artisan tinker
+# Find your user and update timezone
+$user = App\Models\User::where('github_username', 'your-username')->first();
+$user->timezone = 'America/New_York';  # Use any valid PHP timezone
+$user->save();
+```
+
+**Option 2: Direct Database Update**
+
+```bash
+# Using SQLite
+sqlite3 database/database.sqlite
+UPDATE users SET timezone = 'America/New_York' WHERE github_username = 'your-username';
+
+# Using PostgreSQL (production)
+psql -h your-host -d your-database -U your-username
+UPDATE users SET timezone = 'America/New_York' WHERE github_username = 'your-username';
+```
+
+**Common Timezones:**
+- `America/New_York` (Eastern Time)
+- `America/Chicago` (Central Time)  
+- `America/Denver` (Mountain Time)
+- `America/Los_Angeles` (Pacific Time)
+- `Europe/London`
+- `Asia/Tokyo`
+
+See [PHP's List of Supported Timezones](https://www.php.net/manual/en/timezones.php) for all available options.
+
+**Note:** A settings UI for changing timezone is planned for a future update.
 
 ## API Endpoints
 
@@ -276,7 +315,9 @@ The app is designed to be respectful of GitHub's API rate limits:
 
 ### Users Table
 - `github_username` - Unique GitHub username
-- `github_token` - Encrypted GitHub token
+- `github_token` - Encrypted GitHub token (PAT)
+- `github_oauth_token` - Encrypted GitHub OAuth token
+- `timezone` - User's timezone (defaults to UTC)
 - `copilot_plan` - Copilot subscription plan
 - `quota_limit` - Monthly quota limit
 - `quota_reset_date` - When quota resets
