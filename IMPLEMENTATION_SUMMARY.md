@@ -2,11 +2,13 @@
 
 ## Problem Statement
 
-The dashboard graph had two issues:
+The dashboard graph had three issues:
 
 1. **Time Alignment Issue**: For users in timezones like America/New_York, the '1D' view on 'per-check' mode showed the back half of yesterday and front half of today, with a flat section in the middle for nighttime. This was because the chart used UTC for day boundaries instead of the user's local timezone.
 
 2. **Y-Axis Scaling Issue**: The chart started at 0, but when premium request counts are in the hundreds, this compressed the graph line making it harder to see features and trends.
+
+3. **"Today" vs "Last 24 Hours"**: The original "1D" button showed "last 24 hours" which spans two calendar days. Users wanted a way to see only the current day's data aligned with their timezone.
 
 ## Solution Implemented
 
@@ -23,9 +25,10 @@ The dashboard graph had two issues:
 
 **Controller Changes:**
 - `calculateDateRange()` now accepts user parameter and uses `now($timezone)` instead of `now()`
+- Special handling for range=0 to show "today only" (midnight to now in user's timezone)
 - `preparePerCheckData()` converts timestamps to user timezone for display and calculations
 - `prepareChartDataFromHistory()` groups snapshots by date in user timezone
-- `buildChartRangeLabel()` uses user timezone for date formatting
+- `buildChartRangeLabel()` uses user timezone for date formatting with "Today"/"Yesterday" labels
 - Added `updateTimezone()` endpoint to allow timezone updates via POST request
 
 **Frontend Changes:**
@@ -44,6 +47,24 @@ The dashboard graph had two issues:
   - Clamps at 0 (never goes negative)
 - Daily view keeps `beginAtZero: true` for consistency with existing behavior
 
+### 3. "Today" Range Option
+
+**UI Changes:**
+- Added "Today" button to range selector (shows as first option)
+- Keeps existing "1D", "7D", "30D" buttons
+- "Today" button internally uses `range=0` to indicate current calendar day only
+
+**Backend Changes:**
+- Modified `ALLOWED_RANGES` to include 0
+- Updated `calculateDateRange()` to handle range=0 as special case:
+  - Returns `[startOfDay, endOfDay]` for the current day in user's timezone
+  - With offset: offset=1 shows yesterday, offset=2 shows day before, etc.
+- Updated `buildChartRangeLabel()` to show "Today", "Yesterday", or specific date
+
+**Frontend Changes:**
+- Updated `updateRangeLabel()` JavaScript function to handle range=0
+- Shows contextual labels: "Today" (offset=0), "Yesterday" (offset=1), or date (offset>1)
+
 ## How It Works
 
 ### Timezone Alignment
@@ -52,6 +73,14 @@ When a user in America/New_York (EST/EDT, UTC-5/-4) views the dashboard:
 1. **Day Boundaries**: Instead of using UTC midnight (8 PM EST / 7 PM EDT), the chart now uses the user's local midnight
 2. **Data Grouping**: Snapshots are grouped by date in the user's timezone, not UTC
 3. **Time Display**: Per-check chart shows times in user's timezone (e.g., "Feb 12 14:00" instead of "Feb 12 19:00")
+
+### "Today" vs "1D" Range
+- **"Today" (range=0)**: Shows data from user's local midnight (00:00) until now
+  - Clicking ◀ shows yesterday's data (same day boundary logic)
+  - Clicking ▶ returns to today (when viewing past days)
+- **"1D" (range=1)**: Shows last 24 hours from current time
+  - Example: If it's 3 PM on Feb 12, shows data from 3 PM Feb 11 to 3 PM Feb 12
+  - May span across two calendar days
 
 ### Y-Axis Scaling
 For per-check view with values ranging from 200-272:
@@ -101,8 +130,10 @@ Created comprehensive test suite (`DashboardTimezoneTest.php`) covering:
 - Timezone update API endpoint
 - Timezone validation
 - Authentication requirements
+- "Today" range functionality
+- "Yesterday" label display
 
-All tests pass, including existing tests (21 total tests, 57 assertions).
+All tests pass, including existing tests (23 total tests, 64 assertions).
 
 ## Files Modified
 
