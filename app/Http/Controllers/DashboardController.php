@@ -398,4 +398,20 @@ class DashboardController extends Controller
             'checked_at' => $snapshot->checked_at?->toIso8601String(),
         ];
     }
+
+    public function updateTimezone(Request $request): JsonResponse
+    {
+        $request->validate([
+            'timezone' => 'required|string|timezone:all',
+        ]);
+
+        $user = $request->user();
+        $user->timezone = $request->input('timezone');
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'timezone' => $user->timezone,
+        ]);
+    }
 }

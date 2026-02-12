@@ -138,4 +138,42 @@ class DashboardTimezoneTest extends TestCase
         $minValue = min($perCheckData['used']);
         $this->assertGreaterThan(0, $minValue);
     }
+
+    public function test_can_update_timezone_via_api(): void
+    {
+        $user = $this->createUserWithTimezone('UTC');
+
+        $response = $this->actingAs($user)->postJson('/dashboard/timezone', [
+            'timezone' => 'America/Los_Angeles',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'timezone' => 'America/Los_Angeles',
+        ]);
+
+        $this->assertEquals('America/Los_Angeles', $user->fresh()->timezone);
+    }
+
+    public function test_timezone_update_validates_timezone(): void
+    {
+        $user = $this->createUserWithTimezone('UTC');
+
+        $response = $this->actingAs($user)->postJson('/dashboard/timezone', [
+            'timezone' => 'Invalid/Timezone',
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertEquals('UTC', $user->fresh()->timezone);
+    }
+
+    public function test_timezone_update_requires_authentication(): void
+    {
+        $response = $this->postJson('/dashboard/timezone', [
+            'timezone' => 'America/New_York',
+        ]);
+
+        $response->assertStatus(401);
+    }
 }

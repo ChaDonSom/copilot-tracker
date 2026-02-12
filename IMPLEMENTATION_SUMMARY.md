@@ -26,6 +26,13 @@ The dashboard graph had two issues:
 - `preparePerCheckData()` converts timestamps to user timezone for display and calculations
 - `prepareChartDataFromHistory()` groups snapshots by date in user timezone
 - `buildChartRangeLabel()` uses user timezone for date formatting
+- Added `updateTimezone()` endpoint to allow timezone updates via POST request
+
+**Frontend Changes:**
+- Added automatic timezone detection using JavaScript's `Intl.DateTimeFormat().resolvedOptions().timeZone`
+- Automatically sends detected timezone to server on dashboard load
+- Reloads page after timezone update to apply new settings
+- Added CSRF token meta tag for secure POST requests
 
 ### 2. Dynamic Y-Axis Scaling
 
@@ -64,7 +71,15 @@ For per-check view with values ranging from 200-272:
 
 ## User Configuration
 
-Users can set their timezone using Laravel Tinker or direct database update:
+**Automatic Detection (Recommended):**
+The dashboard automatically detects the user's timezone from their browser using JavaScript:
+- Uses `Intl.DateTimeFormat().resolvedOptions().timeZone` to get browser timezone
+- Automatically sends to server on dashboard load
+- Only updates if timezone differs from current setting
+- Reloads page to apply new timezone
+
+**Manual Override (If Needed):**
+Users can manually set a different timezone using Laravel Tinker:
 
 ```php
 // Using Tinker
@@ -83,8 +98,11 @@ Created comprehensive test suite (`DashboardTimezoneTest.php`) covering:
 - Date range calculations with timezones
 - Per-check data timezone conversions
 - Y-axis dynamic scaling
+- Timezone update API endpoint
+- Timezone validation
+- Authentication requirements
 
-All tests pass, including existing tests (18 total tests, 51 assertions).
+All tests pass, including existing tests (21 total tests, 57 assertions).
 
 ## Files Modified
 
@@ -92,22 +110,21 @@ All tests pass, including existing tests (18 total tests, 51 assertions).
 2. `app/Models/User.php`
 3. `app/Http/Controllers/DashboardController.php`
 4. `resources/views/dashboard.blade.php`
-5. `tests/Feature/DashboardTimezoneTest.php` (new)
-6. `README.md`
-7. `.gitignore`
+5. `tests/Feature/DashboardTimezoneTest.php` (updated)
+6. `routes/web.php` (updated)
+7. `README.md`
+8. `.gitignore`
+9. `IMPLEMENTATION_SUMMARY.md` (updated)
 
 ## Backward Compatibility
 
 - Existing users default to UTC timezone (maintains current behavior)
+- Automatic timezone detection implemented - users no longer need manual configuration
 - Daily view chart keeps beginAtZero behavior
 - No breaking changes to API or existing functionality
 
 ## Future Enhancements
 
-- Settings UI for users to change their timezone through the web interface
-- Automatic timezone detection based on browser/system settings
+- Settings UI for users to override automatically detected timezone
 - Per-check view could also apply dynamic Y-axis to recommendation line
-
-## Demo Data
-
-A demo data seeder (`seed-demo-data.php`) was created to test the implementation but is not committed to the repository.
+- Timezone preference could be persisted across multiple devices

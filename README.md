@@ -134,32 +134,26 @@ Deployment takes approximately 40-60 seconds.
   - Recommended usage (target usage over time)
 - **Visual Warnings** - Color-coded progress bars warn when running low on quota
 - **Auto-Refresh** - Dashboard data auto-refreshes every 5 minutes (only when tab is visible), with optional manual refresh
-- **Timezone Support** - Charts align with your local timezone for accurate day boundaries
+- **Automatic Timezone Detection** - Charts automatically align with your local timezone for accurate day boundaries
 
-### Setting Your Timezone
+### Timezone Support
 
-The dashboard uses your timezone to properly align charts with your start-of-day. By default, all users are set to UTC. To change your timezone:
+The dashboard automatically detects and uses your browser's timezone to properly align charts with your start-of-day. When you first visit the dashboard (or if your timezone changes), it will automatically update your user profile and reload the page to apply the new timezone.
 
-**Option 1: Using Laravel Tinker (recommended for now)**
+**How it works:**
+- Uses JavaScript's `Intl.DateTimeFormat().resolvedOptions().timeZone` to detect your timezone
+- Automatically sends the detected timezone to the server
+- Charts and data grouping align with your local day boundaries (e.g., midnight in your timezone, not UTC)
+
+**Manual Override (if needed):**
+
+If you need to manually set a different timezone than your browser's, you can use Laravel Tinker:
 
 ```bash
 php artisan tinker
-# Find your user and update timezone
 $user = App\Models\User::where('github_username', 'your-username')->first();
 $user->timezone = 'America/New_York';  # Use any valid PHP timezone
 $user->save();
-```
-
-**Option 2: Direct Database Update**
-
-```bash
-# Using SQLite
-sqlite3 database/database.sqlite
-UPDATE users SET timezone = 'America/New_York' WHERE github_username = 'your-username';
-
-# Using PostgreSQL (production)
-psql -h your-host -d your-database -U your-username
-UPDATE users SET timezone = 'America/New_York' WHERE github_username = 'your-username';
 ```
 
 **Common Timezones:**
@@ -171,8 +165,6 @@ UPDATE users SET timezone = 'America/New_York' WHERE github_username = 'your-use
 - `Asia/Tokyo`
 
 See [PHP's List of Supported Timezones](https://www.php.net/manual/en/timezones.php) for all available options.
-
-**Note:** A settings UI for changing timezone is planned for a future update.
 
 ## API Endpoints
 

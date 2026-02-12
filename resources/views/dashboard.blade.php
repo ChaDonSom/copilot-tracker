@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>GitHub Copilot Usage Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -439,6 +440,36 @@
 
     @if($snapshot)
     <script>
+        // -------- Timezone Detection & Auto-Update --------
+        (function() {
+            // Detect browser timezone using Intl API
+            const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const currentTimezone = '{{ $user->timezone ?? "UTC" }}';
+            
+            // Only update if timezone is different and detected timezone is valid
+            if (detectedTimezone && detectedTimezone !== currentTimezone) {
+                fetch('{{ route('dashboard.timezone') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({ timezone: detectedTimezone })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('Timezone auto-updated to:', data.timezone);
+                        // Reload page to apply new timezone to charts
+                        window.location.reload();
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to update timezone:', err);
+                });
+            }
+        })();
+
         // -------- State --------
         let currentView = 'daily';
         let chartRange = {{ $chartRange }};
