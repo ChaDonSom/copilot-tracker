@@ -14,7 +14,7 @@ class DashboardController extends Controller
         private GitHubCopilotService $githubService
     ) {}
 
-    private const ALLOWED_RANGES = [1, 7, 30];
+    private const ALLOWED_RANGES = [0, 1, 7, 30]; // 0 = today only
     private const MAX_OFFSET = 52; // ~1.5 years back at 30-day range
 
     public function index(Request $request): View
@@ -113,6 +113,18 @@ class DashboardController extends Controller
 
     private function buildChartRangeLabel(int $rangeDays, int $offset, $user = null): string
     {
+        // Special case: range=0 means "today"
+        if ($rangeDays === 0) {
+            if ($offset === 0) {
+                return 'Today';
+            } elseif ($offset === 1) {
+                return 'Yesterday';
+            } else {
+                [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
+                return $start->format('M d');
+            }
+        }
+        
         if ($offset === 0) {
             return 'Last ' . $rangeDays . ' day' . ($rangeDays > 1 ? 's' : '');
         }
@@ -126,10 +138,21 @@ class DashboardController extends Controller
      * Calculate the calendar-day-aligned start and end dates for a given range and offset.
      * Returns [startOfDay, startOfNextDay) so the upper bound is exclusive.
      * Uses user's timezone for date boundaries.
+     * Special case: range=0 means "today only" (current calendar day in user's timezone).
      */
     private function calculateDateRange(int $rangeDays, int $offset, $user = null): array
     {
         $timezone = $user ? $user->getUserTimezone() : 'UTC';
+        
+        // Special case: range=0 means "today only"
+        if ($rangeDays === 0) {
+            // For offset=0, show today. For offset=1, show yesterday, etc.
+            $start = now($timezone)->subDays($offset)->startOfDay();
+            $end = $start->copy()->endOfDay()->addSecond(); // Exclusive upper bound
+            return [$start, $end];
+        }
+        
+        // Regular range calculation (last N days)
         $end = now($timezone)->subDays($offset * $rangeDays)->addDay()->startOfDay();
         $start = $end->copy()->subDays($rangeDays);
 

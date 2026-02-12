@@ -176,4 +176,77 @@ class DashboardTimezoneTest extends TestCase
 
         $response->assertStatus(401);
     }
+
+    public function test_today_range_shows_only_current_day(): void
+    {
+        $user = $this->createUserWithTimezone('America/New_York');
+
+        // Create snapshots across multiple days
+        $now = \Carbon\Carbon::now('America/New_York');
+        
+        // Yesterday's snapshots
+        for ($i = 0; $i < 5; $i++) {
+            UsageSnapshot::create([
+                'user_id' => $user->id,
+                'quota_limit' => 500,
+                'remaining' => 500 - (100 + $i * 10),
+                'used' => 100 + $i * 10,
+                'percent_remaining' => ((500 - (100 + $i * 10)) / 500) * 100,
+                'reset_date' => now()->addDays(15)->toDateString(),
+                'checked_at' => $now->copy()->subDay()->addHours($i * 2)->setTimezone('UTC'),
+            ]);
+        }
+        
+        // Today's snapshots
+        for ($i = 0; $i < 5; $i++) {
+            UsageSnapshot::create([
+                'user_id' => $user->id,
+                'quota_limit' => 500,
+                'remaining' => 500 - (200 + $i * 10),
+                'used' => 200 + $i * 10,
+                'percent_remaining' => ((500 - (200 + $i * 10)) / 500) * 100,
+                'reset_date' => now()->addDays(15)->toDateString(),
+                'checked_at' => $now->copy()->addHours($i * 2)->setTimezone('UTC'),
+            ]);
+        }
+
+        $this->mock(GitHubCopilotService::class);
+
+        // Request with range=0 (Today)
+        $response = $this->actingAs($user)->get('/dashboard?range=0&offset=0');
+        
+        $response->assertStatus(200);
+        $this->assertEquals(0, $response->viewData('chartRange'));
+        $this->assertEquals('Today', $response->viewData('chartRangeLabel'));
+        
+        // Verify only today's data is included
+        $perCheckData = $response->viewData('perCheckData');
+        $this->assertNotNull($perCheckData);
+        // Should have 5 today's snapshots
+        $this->assertGreaterThan(0, count($perCheckData['used']));
+    }
+
+    public function test_yesterday_range_label(): void
+    {
+        $user = $this->createUserWithTimezone('America/New_York');
+        
+        // Create a snapshot so latestSnapshot() doesn't return null
+        UsageSnapshot::create([
+            'user_id' => $user->id,
+            'quota_limit' => 500,
+            'remaining' => 300,
+            'used' => 200,
+            'percent_remaining' => 60.0,
+            'reset_date' => now()->addDays(15)->toDateString(),
+            'checked_at' => now(),
+        ]);
+
+        $this->mock(GitHubCopilotService::class);
+
+        // Request with range=0, offset=1 (Yesterday)
+        $response = $this->actingAs($user)->get('/dashboard?range=0&offset=1');
+        
+        $response->assertStatus(200);
+        $this->assertEquals('Yesterday', $response->viewData('chartRangeLabel'));
+    }
 }

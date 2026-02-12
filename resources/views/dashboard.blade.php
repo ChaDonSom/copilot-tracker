@@ -416,6 +416,7 @@
                         </div>
                         {{-- Range selector --}}
                         <div class="toggle-group" id="rangeToggle">
+                            <button class="toggle-btn {{ $chartRange == 0 ? 'active' : '' }}" data-range="0">Today</button>
                             <button class="toggle-btn {{ $chartRange == 1 ? 'active' : '' }}" data-range="1">1D</button>
                             <button class="toggle-btn {{ $chartRange == 7 ? 'active' : '' }}" data-range="7">7D</button>
                             <button class="toggle-btn {{ $chartRange == 30 ? 'active' : '' }}" data-range="30">30D</button>
@@ -636,7 +637,19 @@
         function updateRangeLabel() {
             const label = document.getElementById('rangeLabel');
             const nextBtn = document.getElementById('chartNext');
-            if (chartOffset === 0) {
+            
+            // Special case: range=0 means "today"
+            if (chartRange === 0) {
+                if (chartOffset === 0) {
+                    label.textContent = 'Today';
+                } else if (chartOffset === 1) {
+                    label.textContent = 'Yesterday';
+                } else {
+                    const date = new Date();
+                    date.setDate(date.getDate() - chartOffset);
+                    label.textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+            } else if (chartOffset === 0) {
                 label.textContent = 'Last ' + chartRange + ' day' + (chartRange > 1 ? 's' : '');
             } else {
                 const end = new Date();
