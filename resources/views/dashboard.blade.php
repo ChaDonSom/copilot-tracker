@@ -557,6 +557,9 @@
                 chart.data = dailyData;
                 chart.options.scales.x.type = 'category';
                 delete chart.options.scales.x.time;
+                // For daily view, keep beginAtZero
+                chart.options.scales.y.beginAtZero = true;
+                delete chart.options.scales.y.min;
             } else {
                 chart.data = perCheckData;
                 chart.options.scales.x.type = 'time';
@@ -564,6 +567,26 @@
                     displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' },
                     tooltipFormat: 'MMM d, yyyy HH:mm'
                 };
+                
+                // For per-check view, use dynamic minimum based on the "Cumulative Used" dataset (blue line)
+                const usedData = perCheckData.datasets[0].data;
+                if (usedData && usedData.length > 0) {
+                    const values = usedData.map(point => point.y);
+                    const minValue = Math.min(...values);
+                    const maxValue = Math.max(...values);
+                    const range = maxValue - minValue;
+                    
+                    // Add 10% padding below the minimum, but don't go below 0
+                    const padding = range * 0.1;
+                    const yMin = Math.max(0, Math.floor(minValue - padding));
+                    
+                    chart.options.scales.y.beginAtZero = false;
+                    chart.options.scales.y.min = yMin;
+                } else {
+                    // Fallback if no data
+                    chart.options.scales.y.beginAtZero = true;
+                    delete chart.options.scales.y.min;
+                }
             }
             chart.update();
         }

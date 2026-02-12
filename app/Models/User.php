@@ -15,6 +15,7 @@ class User extends Authenticatable
         'github_username',
         'github_token',
         'github_oauth_token',
+        'timezone',
         'copilot_plan',
         'quota_limit',
         'quota_reset_date',
@@ -74,8 +75,19 @@ class User extends Authenticatable
 
     public function todaySnapshots()
     {
+        $timezone = $this->getUserTimezone();
+        $today = now($timezone)->toDateString();
+        
         return $this->usageSnapshots()
-            ->whereDate('checked_at', now()->toDateString())
+            ->whereDate('checked_at', $today)
             ->orderBy('checked_at');
+    }
+
+    /**
+     * Get the user's timezone, defaulting to UTC.
+     */
+    public function getUserTimezone(): string
+    {
+        return $this->timezone ?? 'UTC';
     }
 }
