@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Models\UsageSnapshot;
 use App\Services\GitHubCopilotService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Mockery;
 use Tests\TestCase;
 
 class DashboardPaceStatusTest extends TestCase
@@ -184,5 +183,113 @@ class DashboardPaceStatusTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('id="lastChecked"', false);
+    }
+
+    public function test_pace_status_shows_on_pace_within_threshold(): void
+    {
+        // With quota_limit=300, dailyIdealUsage=10, threshold=max(1,round(10*0.1))=1
+        // Setting used to match idealUsedByNow so difference is 0 → on-pace
+        $this->travelTo(now()->startOfDay()->addHours(12));
+
+        // Use startOfDay for reset_date to match the model's date cast (no time component)
+        $resetDate = now()->addDays(15)->startOfDay();
+        $cycleStart = $resetDate->copy()->subDays(30);
+        $daysPassed = max(0, $cycleStart->diffInDays(now(), false));
+        $hoursToday = now()->hour + (now()->minute / 60);
+        $totalElapsed = min(30, $daysPassed + ($hoursToday / 24));
+        $idealUsed = (int) round($totalElapsed * (300 / 30));
+
+        $user = User::forceCreate([
+            'github_username' => 'testuser',
+            'github_token' => null,
+            'copilot_plan' => 'individual_pro',
+            'quota_limit' => 300,
+            'quota_reset_date' => $resetDate,
+            'last_checked_at' => now(),
+        ]);
+
+        UsageSnapshot::create([
+            'user_id' => $user->id,
+            'quota_limit' => 300,
+            'remaining' => 300 - $idealUsed,
+            'used' => $idealUsed,
+            'percent_remaining' => round((300 - $idealUsed) / 300 * 100, 2),
+            'reset_date' => $resetDate->toDateString(),
+            'checked_at' => now(),
+        ]);
+
+        $this->mock(GitHubCopilotService::class);
+
+        $response = $this->actingAs($user)->get('/dashboard');
+
+        $paceStatus = $response->viewData('paceStatus');
+        $this->assertNotNull($paceStatus);
+        $this->assertEquals('on-pace', $paceStatus['status']);
+    }
+
+    public function test_pace_status_transitions_from_on_pace_to_under_pace_at_boundary(): void
+    {
+        // With quota_limit=300, dailyIdealUsage=10, threshold=1
+        // If used is 2 less than ideal, difference=2 > threshold=1 → under-pace
+        $this->travelTo(now()->startOfDay()->addHours(12));
+
+        $resetDate = now()->addDays(15)->startOfDay();
+        $cycleStart = $resetDate->copy()->subDays(30);
+        $daysPassed = max(0, $cycleStart->diffInDays(now(), false));
+        $hoursToday = now()->hour + (now()->minute / 60);
+        $totalElapsed = min(30, $daysPassed + ($hoursToday / 24));
+        $idealUsed = (int) round($totalElapsed * (300 / 30));
+
+        // Set used to idealUsed - 2, so difference = 2 > threshold of 1
+        $used = $idealUsed - 2;
+
+        $user = User::forceCreate([
+            'github_username' => 'testuser',
+            'github_token' => null,
+            'copilot_plan' => 'individual_pro',
+            'quota_limit' => 300,
+            'quota_reset_date' => $resetDate,
+            'last_checked_at' => now(),
+        ]);
+
+        UsageSnapshot::create([
+            'user_id' => $user->id,
+            'quota_limit' => 300,
+            'remaining' => 300 - $used,
+            'used' => $used,
+            'percent_remaining' => round((300 - $used) / 300 * 100, 2),
+            'reset_date' => $resetDate->toDateString(),
+            'checked_at' => now(),
+        ]);
+
+        $this->mock(GitHubCopilotService::class);
+
+        $response = $this->actingAs($user)->get('/dashboard');
+
+        $paceStatus = $response->viewData('paceStatus');
+        $this->assertNotNull($paceStatus);
+        $this->assertEquals('under-pace', $paceStatus['status']);
+        $this->assertGreaterThan(0, $paceStatus['difference']);
+    }
+
+    public function test_pace_status_clamps_elapsed_days_at_cycle_boundary(): void
+    {
+        // Reset date is in the past (stale snapshot) — elapsed should be clamped to 30 days
+        // idealUsedByNow should be at most quota_limit (300)
+        [$user, $snapshot] = $this->createUserWithSnapshot([
+            'used' => 280,
+            'remaining' => 20,
+            'percent_remaining' => 6.67,
+            'reset_date' => now()->subDays(5)->toDateString(),
+        ]);
+
+        $this->mock(GitHubCopilotService::class);
+
+        $response = $this->actingAs($user)->get('/dashboard');
+
+        $paceStatus = $response->viewData('paceStatus');
+        $this->assertNotNull($paceStatus);
+        // idealUsedByNow should be clamped to 300 (full cycle), not exceed it
+        $this->assertLessThanOrEqual(300, $paceStatus['idealUsedByNow']);
     }
 }

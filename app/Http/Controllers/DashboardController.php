@@ -348,9 +348,9 @@ class DashboardController extends Controller
         $totalDaysInCycle = 30;
         $daysPassed = max(0, $cycleStart->diffInDays($now, false));
 
-        // Add fractional day for current time
+        // Add fractional day for current time, clamped to cycle length
         $hoursToday = $now->hour + ($now->minute / 60);
-        $totalElapsedDays = $daysPassed + ($hoursToday / 24);
+        $totalElapsedDays = min($totalDaysInCycle, $daysPassed + ($hoursToday / 24));
 
         // Calculate ideal usage at this point in the cycle
         $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
