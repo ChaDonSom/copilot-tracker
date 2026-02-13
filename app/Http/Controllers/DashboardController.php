@@ -138,31 +138,33 @@ class DashboardController extends Controller
 
     /**
      * Calculate the calendar-day-aligned start and end dates for a given range and offset.
-     * Returns [startOfDay, startOfNextDay) so the upper bound is exclusive.
+     * Returns [startOfDay, end) where end is exclusive.
      * Uses user's timezone for date boundaries.
      * Special case: range=0 means "today only" (current calendar day in user's timezone).
      */
     private function calculateDateRange(int $rangeDays, int $offset, $user = null): array
     {
         $timezone = $user ? $user->getUserTimezone() : 'UTC';
+        $now = now($timezone);
         
         // Special case: range=0 means "today only"
         if ($rangeDays === 0) {
             // For offset=0, show today. For offset=1, show yesterday, etc.
-            $start = now($timezone)->subDays($offset)->startOfDay();
+            $start = $now->copy()->subDays($offset)->startOfDay();
             
-            // If showing today (offset=0), end at current time; otherwise end at end of that day
+            // If showing today (offset=0), end at current time; otherwise end at start of next day (exclusive)
             if ($offset === 0) {
-                $end = now($timezone)->addSecond(); // Inclusive of current second
+                // Use the captured $now as an exclusive upper bound
+                $end = $now;
             } else {
-                $end = $start->copy()->addDay()->startOfDay(); // Start of next day (exclusive)
+                $end = $start->copy()->addDay(); // Start of next day (exclusive)
             }
             
             return [$start, $end];
         }
         
         // Regular range calculation (last N days)
-        $end = now($timezone)->subDays($offset * $rangeDays)->addDay()->startOfDay();
+        $end = $now->copy()->subDays($offset * $rangeDays)->addDay()->startOfDay();
         $start = $end->copy()->subDays($rangeDays);
 
         return [$start, $end];
@@ -223,7 +225,7 @@ class DashboardController extends Controller
         }
 
         // Calculate recommendation data
-        $recommendationData = $this->calculateRecommendation($latestSnapshot, $history);
+        $recommendationData = $this->calculateRecommendation($latestSnapshot, $history, $user);
 
         // Prepare chart data (daily view)
         $chartData = [
@@ -245,7 +247,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function calculateRecommendation($snapshot, $history)
+    private function calculateRecommendation($snapshot, $history, $user = null)
     {
         if (!$snapshot) {
             return [
@@ -273,8 +275,9 @@ class DashboardController extends Controller
         $totalRecommendedByNow = round($daysPassed * $dailyIdealUsage);
 
         // Build recommendation line for the chart (cumulative usage trajectory)
-        $dailyRecommendationLine = [];
-        $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
+        // Use the same user-timezone grouping as dailyUsage to avoid label/data mismatches
+        $timezone = $user ? $user->getUserTimezone() : 'UTC';
+        $historyByDate = $history->groupBy(fn($s) => $s->checked_at->copy()->setTimezone($timezone)->format('Y-m-d'));
 
         $dailyRecommendationLine = array_fill(
             0,

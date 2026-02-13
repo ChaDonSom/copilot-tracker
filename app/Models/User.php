@@ -76,12 +76,13 @@ class User extends Authenticatable
     public function todaySnapshots()
     {
         $timezone = $this->getUserTimezone();
-        $startOfDay = now($timezone)->startOfDay()->setTimezone('UTC');
-        $endOfDay = now($timezone)->endOfDay()->setTimezone('UTC');
+        $now = now($timezone);
+        $startOfDay = $now->copy()->startOfDay();
+        $startOfNextDay = $now->copy()->addDay()->startOfDay();
         
         return $this->usageSnapshots()
-            ->where('checked_at', '>=', $startOfDay)
-            ->where('checked_at', '<=', $endOfDay)
+            ->where('checked_at', '>=', $startOfDay->setTimezone('UTC'))
+            ->where('checked_at', '<', $startOfNextDay->setTimezone('UTC'))
             ->orderBy('checked_at');
     }
 

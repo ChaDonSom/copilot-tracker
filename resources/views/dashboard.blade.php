@@ -445,11 +445,11 @@
         (function() {
             // Detect browser timezone using Intl API
             const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            const currentTimezone = '{{ $user->timezone ?? "UTC" }}';
+            const currentTimezone = @json($user->timezone ?? 'UTC');
             
             // Only update if timezone is different and detected timezone is valid
             if (detectedTimezone && detectedTimezone !== currentTimezone) {
-                fetch('{{ route('dashboard.timezone') }}', {
+                fetch(@json(route('dashboard.timezone')), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -457,8 +457,21 @@
                     },
                     body: JSON.stringify({ timezone: detectedTimezone })
                 })
-                .then(response => response.json())
+                .then(response => {
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!response.ok || !contentType.includes('application/json')) {
+                        console.warn('Skipping timezone auto-update due to unexpected response.', {
+                            status: response.status,
+                            contentType: contentType
+                        });
+                        return null;
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (!data) {
+                        return;
+                    }
                     if (data.success) {
                         console.log('Timezone auto-updated to:', data.timezone);
                         // Reload page to apply new timezone to charts

@@ -45,13 +45,19 @@ class DashboardTimezoneTest extends TestCase
 
     public function test_dashboard_uses_user_timezone_for_date_range(): void
     {
-        $user = $this->createUserWithTimezone('America/New_York');
+        $userTimezone = 'America/New_York';
+        $user = $this->createUserWithTimezone($userTimezone);
 
-        // Create snapshots at different times
-        // One at 11 PM EST (4 AM UTC next day) and one at 1 AM EST (6 AM UTC same day)
-        // In UTC these would be on different days, but in EST they're on the same day
+        // Create snapshots at different local times that cross midnight
+        // First at 11 PM in the user's timezone, second at 1 AM the next local day.
+        // These times are stored as UTC in the database, but the dashboard should
+        // group/filter them according to the user's local day.
         
-        $baseTime = now('America/New_York')->setTime(23, 0, 0); // 11 PM EST
+        $baseTimeLocal = \Carbon\Carbon::now($userTimezone)->subDays(1)->setTime(23, 0, 0); // Yesterday 11 PM local time
+
+        $snapshot1CheckedAtUtc = $baseTimeLocal->copy()->setTimezone('UTC');
+        $snapshot2CheckedAtUtc = $baseTimeLocal->copy()->addHours(2)->setTimezone('UTC'); // Yesterday 11 PM + 2 hrs = today 1 AM local
+
         $snapshot1 = UsageSnapshot::create([
             'user_id' => $user->id,
             'quota_limit' => 300,
@@ -59,7 +65,7 @@ class DashboardTimezoneTest extends TestCase
             'used' => 100,
             'percent_remaining' => 66.67,
             'reset_date' => now()->addDays(15)->toDateString(),
-            'checked_at' => $baseTime->copy()->setTimezone('UTC'),
+            'checked_at' => $snapshot1CheckedAtUtc,
         ]);
 
         $snapshot2 = UsageSnapshot::create([
@@ -69,15 +75,27 @@ class DashboardTimezoneTest extends TestCase
             'used' => 150,
             'percent_remaining' => 50.00,
             'reset_date' => now()->addDays(15)->toDateString(),
-            'checked_at' => $baseTime->copy()->addHours(2)->setTimezone('UTC'), // 1 AM EST
+            'checked_at' => $snapshot2CheckedAtUtc,
         ]);
 
         $this->mock(GitHubCopilotService::class);
 
-        $response = $this->actingAs($user)->get('/dashboard');
-        
+        // Use 7-day range to ensure our snapshots are included
+        $response = $this->actingAs($user)->get('/dashboard?range=7');
+
         $response->assertStatus(200);
-        $this->assertNotNull($response->viewData('chartData'));
+
+        $chartData = $response->viewData('chartData');
+        $this->assertIsArray($chartData);
+        $this->assertArrayHasKey('labels', $chartData);
+        $this->assertIsArray($chartData['labels']);
+
+        // Expect the labels to reflect the user's local dates for the snapshots.
+        $snapshot1LocalDate = $snapshot1CheckedAtUtc->copy()->setTimezone($userTimezone)->toDateString();
+        $snapshot2LocalDate = $snapshot2CheckedAtUtc->copy()->setTimezone($userTimezone)->toDateString();
+
+        $this->assertContains($snapshot1LocalDate, $chartData['labels']);
+        $this->assertContains($snapshot2LocalDate, $chartData['labels']);
     }
 
     public function test_per_check_data_respects_user_timezone(): void
@@ -107,7 +125,7 @@ class DashboardTimezoneTest extends TestCase
         $this->assertArrayHasKey('used', $perCheckData);
     }
 
-    public function test_chart_y_axis_scales_dynamically_for_per_check_view(): void
+    public function test_per_check_data_includes_nonzero_values(): void
     {
         $user = $this->createUserWithTimezone('America/New_York');
 
@@ -136,6 +154,7 @@ class DashboardTimezoneTest extends TestCase
         $this->assertGreaterThan(0, count($perCheckData['used']));
         
         // The minimum value should not be 0, it should be based on actual data
+        // (This provides the backend data assumptions for frontend y-axis scaling)
         $minValue = min($perCheckData['used']);
         $this->assertGreaterThan(0, $minValue);
     }
@@ -185,7 +204,7 @@ class DashboardTimezoneTest extends TestCase
         // Create snapshots across multiple days
         $now = \Carbon\Carbon::now('America/New_York');
         
-        // Yesterday's snapshots
+        // Yesterday's snapshots (should NOT be included in "Today" view)
         for ($i = 0; $i < 5; $i++) {
             UsageSnapshot::create([
                 'user_id' => $user->id,
@@ -194,11 +213,11 @@ class DashboardTimezoneTest extends TestCase
                 'used' => 100 + $i * 10,
                 'percent_remaining' => ((500 - (100 + $i * 10)) / 500) * 100,
                 'reset_date' => now()->addDays(15)->toDateString(),
-                'checked_at' => $now->copy()->subDay()->addHours($i * 2)->setTimezone('UTC'),
+                'checked_at' => $now->copy()->subDay()->setTime(10 + $i, 0, 0)->setTimezone('UTC'),
             ]);
         }
         
-        // Today's snapshots
+        // Today's snapshots (SHOULD be included in "Today" view)
         for ($i = 0; $i < 5; $i++) {
             UsageSnapshot::create([
                 'user_id' => $user->id,
@@ -207,7 +226,7 @@ class DashboardTimezoneTest extends TestCase
                 'used' => 200 + $i * 10,
                 'percent_remaining' => ((500 - (200 + $i * 10)) / 500) * 100,
                 'reset_date' => now()->addDays(15)->toDateString(),
-                'checked_at' => $now->copy()->addHours($i * 2)->setTimezone('UTC'),
+                'checked_at' => $now->copy()->setTime(8 + $i, 0, 0)->setTimezone('UTC'),
             ]);
         }
 
@@ -223,8 +242,21 @@ class DashboardTimezoneTest extends TestCase
         // Verify only today's data is included
         $perCheckData = $response->viewData('perCheckData');
         $this->assertNotNull($perCheckData);
-        // Should have 5 today's snapshots
+        // Should have 5 today's snapshots (yesterday's should be excluded)
         $this->assertGreaterThan(0, count($perCheckData['used']));
+
+        // Ensure no timestamps from the prior day are present (in user timezone)
+        $timestamps = $perCheckData['timestamps'] ?? [];
+        $this->assertNotEmpty($timestamps);
+
+        $todayDate = $now->toDateString();
+        $yesterdayDate = $now->copy()->subDay()->toDateString();
+
+        foreach ($timestamps as $timestamp) {
+            $timestampDate = \Carbon\Carbon::parse($timestamp)->setTimezone('America/New_York')->toDateString();
+            $this->assertEquals($todayDate, $timestampDate, 'All data points should be from today.');
+            $this->assertNotEquals($yesterdayDate, $timestampDate, 'No data points from yesterday should be included.');
+        }
     }
 
     public function test_yesterday_range_label(): void
