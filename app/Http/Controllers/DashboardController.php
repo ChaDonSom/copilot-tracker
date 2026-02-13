@@ -14,7 +14,7 @@ class DashboardController extends Controller
         private GitHubCopilotService $githubService
     ) {}
 
-    private const ALLOWED_RANGES = [1, 7, 30];
+    private const ALLOWED_RANGES = [0, 1, 7, 30]; // 0 = today only
     private const MAX_OFFSET = 52; // ~1.5 years back at 30-day range
 
     public function index(Request $request): View
@@ -36,7 +36,7 @@ class DashboardController extends Controller
         $viewData['todayUsed'] = $this->calculateTodayUsed($user);
         $viewData['chartRange'] = $rangeDays;
         $viewData['chartOffset'] = $offset;
-        $viewData['chartRangeLabel'] = $this->buildChartRangeLabel($rangeDays, $offset);
+        $viewData['chartRangeLabel'] = $this->buildChartRangeLabel($rangeDays, $offset, $user);
         $viewData['percentUsed'] = $latestSnapshot && $latestSnapshot->quota_limit > 0
             ? round(($latestSnapshot->used / $latestSnapshot->quota_limit) * 100, 1)
             : ($latestSnapshot ? round(100 - $latestSnapshot->percent_remaining, 1) : 0);
@@ -78,11 +78,13 @@ class DashboardController extends Controller
 
     private function getHistoryForRange($user, int $rangeDays, int $offset)
     {
-        [$start, $end] = $this->calculateDateRange($rangeDays, $offset);
+        [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
+        $startUtc = $start->copy()->setTimezone('UTC');
+        $endUtc = $end->copy()->setTimezone('UTC');
 
         return $user->usageSnapshots()
-            ->where('checked_at', '>=', $start)
-            ->where('checked_at', '<', $end)
+            ->where('checked_at', '>=', $startUtc)
+            ->where('checked_at', '<', $endUtc)
             ->orderBy('checked_at', 'asc')
             ->get();
     }
@@ -111,24 +113,58 @@ class DashboardController extends Controller
         return $this->calculateUsageFromSnapshots($user->todaySnapshots()->get());
     }
 
-    private function buildChartRangeLabel(int $rangeDays, int $offset): string
+    private function buildChartRangeLabel(int $rangeDays, int $offset, $user = null): string
     {
+        // Special case: range=0 means "today"
+        if ($rangeDays === 0) {
+            if ($offset === 0) {
+                return 'Today';
+            } elseif ($offset === 1) {
+                return 'Yesterday';
+            } else {
+                [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
+                return $start->format('M d');
+            }
+        }
+        
         if ($offset === 0) {
             return 'Last ' . $rangeDays . ' day' . ($rangeDays > 1 ? 's' : '');
         }
 
-        [$start, $end] = $this->calculateDateRange($rangeDays, $offset);
+        [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
 
         return $start->format('M d') . ' – ' . $end->format('M d');
     }
 
     /**
      * Calculate the calendar-day-aligned start and end dates for a given range and offset.
-     * Returns [startOfDay, startOfNextDay) so the upper bound is exclusive.
+     * Returns [startOfDay, end) where end is exclusive.
+     * Uses user's timezone for date boundaries.
+     * Special case: range=0 means "today only" (current calendar day in user's timezone).
      */
-    private function calculateDateRange(int $rangeDays, int $offset): array
+    private function calculateDateRange(int $rangeDays, int $offset, $user = null): array
     {
-        $end = now()->subDays($offset * $rangeDays)->addDay()->startOfDay();
+        $timezone = $user ? $user->getUserTimezone() : 'UTC';
+        $now = now($timezone);
+        
+        // Special case: range=0 means "today only"
+        if ($rangeDays === 0) {
+            // For offset=0, show today. For offset=1, show yesterday, etc.
+            $start = $now->copy()->subDays($offset)->startOfDay();
+            
+            // If showing today (offset=0), end at current time; otherwise end at start of next day (exclusive)
+            if ($offset === 0) {
+                // Use the captured $now as an exclusive upper bound
+                $end = $now;
+            } else {
+                $end = $start->copy()->addDay(); // Start of next day (exclusive)
+            }
+            
+            return [$start, $end];
+        }
+        
+        // Regular range calculation (last N days)
+        $end = $now->copy()->subDays($offset * $rangeDays)->addDay()->startOfDay();
         $start = $end->copy()->subDays($rangeDays);
 
         return [$start, $end];
@@ -168,7 +204,8 @@ class DashboardController extends Controller
     {
         // Calculate daily usage
         $dailyUsage = [];
-        $historyByDate = $history->groupBy(fn($snapshot) => $snapshot->checked_at->format('Y-m-d'));
+        $timezone = $user->getUserTimezone();
+        $historyByDate = $history->groupBy(fn($snapshot) => $snapshot->checked_at->copy()->setTimezone($timezone)->format('Y-m-d'));
 
         foreach ($historyByDate as $date => $snapshots) {
             $firstSnapshot = $snapshots->first();
@@ -188,7 +225,7 @@ class DashboardController extends Controller
         }
 
         // Calculate recommendation data
-        $recommendationData = $this->calculateRecommendation($latestSnapshot, $history);
+        $recommendationData = $this->calculateRecommendation($latestSnapshot, $history, $user);
 
         // Prepare chart data (daily view)
         $chartData = [
@@ -198,7 +235,7 @@ class DashboardController extends Controller
         ];
 
         // Prepare per-check chart data
-        $perCheckData = $this->preparePerCheckData($history);
+        $perCheckData = $this->preparePerCheckData($history, $user);
 
         return [
             'user' => $user,
@@ -210,7 +247,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function calculateRecommendation($snapshot, $history)
+    private function calculateRecommendation($snapshot, $history, $user = null)
     {
         if (!$snapshot) {
             return [
@@ -238,8 +275,9 @@ class DashboardController extends Controller
         $totalRecommendedByNow = round($daysPassed * $dailyIdealUsage);
 
         // Build recommendation line for the chart (cumulative usage trajectory)
-        $dailyRecommendationLine = [];
-        $historyByDate = $history->groupBy(fn($s) => $s->checked_at->format('Y-m-d'));
+        // Use the same user-timezone grouping as dailyUsage to avoid label/data mismatches
+        $timezone = $user ? $user->getUserTimezone() : 'UTC';
+        $historyByDate = $history->groupBy(fn($s) => $s->checked_at->copy()->setTimezone($timezone)->format('Y-m-d'));
 
         $dailyRecommendationLine = array_fill(
             0,
@@ -266,13 +304,14 @@ class DashboardController extends Controller
         ];
     }
 
-    private function preparePerCheckData($history)
+    private function preparePerCheckData($history, $user)
     {
         $labels = [];
         $timestamps = [];
         $used = [];
         $recommendation = [];
 
+        $timezone = $user->getUserTimezone();
         $cumulativeUsed = 0;
         $firstSnapshot = $history->first();
         $lastSnapshot = $history->last();
@@ -281,7 +320,9 @@ class DashboardController extends Controller
         $currentTotalUsed = $lastSnapshot ? $lastSnapshot->used : 0;
 
         foreach ($history as $index => $snapshot) {
-            $labels[] = $snapshot->checked_at->format('M d H:i');
+            // Convert to user timezone for display
+            $checkedAtInUserTz = $snapshot->checked_at->copy()->setTimezone($timezone);
+            $labels[] = $checkedAtInUserTz->format('M d H:i');
             $timestamps[] = $snapshot->checked_at->toIso8601String();
 
             if ($index === 0) {
@@ -306,9 +347,10 @@ class DashboardController extends Controller
                 $totalDaysInCycle = 30;
                 $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
 
-                // Calculate elapsed time from cycle start - use ->copy() to avoid mutating the original
-                $elapsedDays = $cycleStart->diffInDays($snapshot->checked_at->copy()->startOfDay(), false);
-                $elapsedHours = $snapshot->checked_at->hour + ($snapshot->checked_at->minute / 60);
+                // Calculate elapsed time from cycle start in user's timezone
+                $snapshotInUserTz = $snapshot->checked_at->copy()->setTimezone($timezone);
+                $elapsedDays = $cycleStart->diffInDays($snapshotInUserTz->copy()->startOfDay(), false);
+                $elapsedHours = $snapshotInUserTz->hour + ($snapshotInUserTz->minute / 60);
                 $totalElapsedDays = $elapsedDays + ($elapsedHours / 24);
 
                 $recommendation[] = round($totalElapsedDays * $dailyIdealUsage);
@@ -390,5 +432,21 @@ class DashboardController extends Controller
             'reset_date' => $snapshot->reset_date?->toIso8601String(),
             'checked_at' => $snapshot->checked_at?->toIso8601String(),
         ];
+    }
+
+    public function updateTimezone(Request $request): JsonResponse
+    {
+        $request->validate([
+            'timezone' => 'required|string|timezone:all',
+        ]);
+
+        $user = $request->user();
+        $user->timezone = $request->input('timezone');
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'timezone' => $user->timezone,
+        ]);
     }
 }

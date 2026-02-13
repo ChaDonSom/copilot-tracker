@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>GitHub Copilot Usage Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -415,6 +416,7 @@
                         </div>
                         {{-- Range selector --}}
                         <div class="toggle-group" id="rangeToggle">
+                            <button class="toggle-btn {{ $chartRange == 0 ? 'active' : '' }}" data-range="0">Today</button>
                             <button class="toggle-btn {{ $chartRange == 1 ? 'active' : '' }}" data-range="1">1D</button>
                             <button class="toggle-btn {{ $chartRange == 7 ? 'active' : '' }}" data-range="7">7D</button>
                             <button class="toggle-btn {{ $chartRange == 30 ? 'active' : '' }}" data-range="30">30D</button>
@@ -439,6 +441,49 @@
 
     @if($snapshot)
     <script>
+        // -------- Timezone Detection & Auto-Update --------
+        (function() {
+            // Detect browser timezone using Intl API
+            const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const currentTimezone = @json($user->timezone ?? 'UTC');
+            
+            // Only update if timezone is different and detected timezone is valid
+            if (detectedTimezone && detectedTimezone !== currentTimezone) {
+                fetch(@json(route('dashboard.timezone')), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({ timezone: detectedTimezone })
+                })
+                .then(response => {
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!response.ok || !contentType.includes('application/json')) {
+                        console.warn('Skipping timezone auto-update due to unexpected response.', {
+                            status: response.status,
+                            contentType: contentType
+                        });
+                        return null;
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) {
+                        return;
+                    }
+                    if (data.success) {
+                        console.log('Timezone auto-updated to:', data.timezone);
+                        // Reload page to apply new timezone to charts
+                        window.location.reload();
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to update timezone:', err);
+                });
+            }
+        })();
+
         // -------- State --------
         let currentView = 'daily';
         let chartRange = {{ $chartRange }};
@@ -557,6 +602,9 @@
                 chart.data = dailyData;
                 chart.options.scales.x.type = 'category';
                 delete chart.options.scales.x.time;
+                // For daily view, keep beginAtZero
+                chart.options.scales.y.beginAtZero = true;
+                delete chart.options.scales.y.min;
             } else {
                 chart.data = perCheckData;
                 chart.options.scales.x.type = 'time';
@@ -564,6 +612,26 @@
                     displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' },
                     tooltipFormat: 'MMM d, yyyy HH:mm'
                 };
+                
+                // For per-check view, use dynamic minimum based on the "Cumulative Used" dataset (blue line)
+                const usedData = perCheckData.datasets[0].data;
+                if (usedData && usedData.length > 0) {
+                    const values = usedData.map(point => point.y);
+                    const minValue = Math.min(...values);
+                    const maxValue = Math.max(...values);
+                    const range = maxValue - minValue;
+                    
+                    // Add 10% padding below the minimum, but don't go below 0
+                    const padding = range * 0.1;
+                    const yMin = Math.max(0, Math.floor(minValue - padding));
+                    
+                    chart.options.scales.y.beginAtZero = false;
+                    chart.options.scales.y.min = yMin;
+                } else {
+                    // Fallback if no data
+                    chart.options.scales.y.beginAtZero = true;
+                    delete chart.options.scales.y.min;
+                }
             }
             chart.update();
         }
@@ -582,7 +650,19 @@
         function updateRangeLabel() {
             const label = document.getElementById('rangeLabel');
             const nextBtn = document.getElementById('chartNext');
-            if (chartOffset === 0) {
+            
+            // Special case: range=0 means "today"
+            if (chartRange === 0) {
+                if (chartOffset === 0) {
+                    label.textContent = 'Today';
+                } else if (chartOffset === 1) {
+                    label.textContent = 'Yesterday';
+                } else {
+                    const date = new Date();
+                    date.setDate(date.getDate() - chartOffset);
+                    label.textContent = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+            } else if (chartOffset === 0) {
                 label.textContent = 'Last ' + chartRange + ' day' + (chartRange > 1 ? 's' : '');
             } else {
                 const end = new Date();
