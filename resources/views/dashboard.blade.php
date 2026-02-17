@@ -655,12 +655,11 @@
                         return pos ? pos[axis] : undefined;
                     };
 
-                    chart.options.animations = chart.options.animations || {};
-                    chart.options.animations.x = { type: 'number', from: fromFor('x') };
-                    chart.options.animations.y = { type: 'number', from: fromFor('y') };
-                } else if (chart.options.animations) {
-                    delete chart.options.animations.x;
-                    delete chart.options.animations.y;
+                    chart.data.datasets[0].animations = { x: { type: 'number', from: fromFor('x') }, y: { type: 'number', from: fromFor('y') } };
+                    chart.data.datasets[1].animations = { x: { type: 'number', from: fromFor('x') }, y: { type: 'number', from: fromFor('y') } };
+                } else {
+                    delete chart.data.datasets[0].animations;
+                    delete chart.data.datasets[1].animations;
                 }
             } else {
                 chart.data = perCheckData;
@@ -698,12 +697,11 @@
                         return pos ? pos[axis] : undefined;
                     };
 
-                    chart.options.animations = chart.options.animations || {};
-                    chart.options.animations.x = { type: 'number', from: fromFor('x') };
-                    chart.options.animations.y = { type: 'number', from: fromFor('y') };
-                } else if (chart.options.animations) {
-                    delete chart.options.animations.x;
-                    delete chart.options.animations.y;
+                    chart.data.datasets[0].animations = { x: { type: 'number', from: fromFor('x') }, y: { type: 'number', from: fromFor('y') } };
+                    chart.data.datasets[1].animations = { x: { type: 'number', from: fromFor('x') }, y: { type: 'number', from: fromFor('y') } };
+                } else {
+                    delete chart.data.datasets[0].animations;
+                    delete chart.data.datasets[1].animations;
                 }
             }
             chart.update();
