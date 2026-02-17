@@ -614,7 +614,32 @@
             };
         }
 
-        function applyViewToChart(previousDailyPositions = null) {
+        function capturePerCheckPointPositions() {
+            if (!chart?.data?.datasets?.length) {
+                return null;
+            }
+
+            const collectPositions = (datasetIndex) => {
+                const meta = chart.getDatasetMeta(datasetIndex);
+                const dataset = chart.data.datasets?.[datasetIndex]?.data;
+                if (!meta?.data || !Array.isArray(dataset)) {
+                    return null;
+                }
+
+                return new Map(dataset.map((point, index) => {
+                    const key = point?.x ?? point?.t;
+                    const element = meta.data?.[index];
+                    return key && element ? [key, { x: element.x, y: element.y }] : null;
+                }).filter(Boolean));
+            };
+
+            const used = collectPositions(0);
+            const recommendation = collectPositions(1);
+
+            return used || recommendation ? { used, recommendation } : null;
+        }
+
+        function applyViewToChart(previousPositions = null) {
             if (currentView === 'daily') {
                 chart.data = dailyData;
                 chart.options.scales.x.type = 'category';
@@ -622,10 +647,10 @@
                 // For daily view, keep beginAtZero
                 chart.options.scales.y.beginAtZero = true;
                 delete chart.options.scales.y.min;
-                if (previousDailyPositions && chart.data?.labels?.length) {
+                if (previousPositions && chart.data?.labels?.length) {
                     const fromFor = (axis) => ctx => {
                         const label = chart.data.labels?.[ctx.dataIndex];
-                        const map = ctx.datasetIndex === 0 ? previousDailyPositions.used : previousDailyPositions.recommendation;
+                        const map = ctx.datasetIndex === 0 ? previousPositions.used : previousPositions.recommendation;
                         const pos = label ? map?.get(label) : null;
                         return pos ? pos[axis] : undefined;
                     };
@@ -664,7 +689,19 @@
                     chart.options.scales.y.beginAtZero = true;
                     delete chart.options.scales.y.min;
                 }
-                if (chart.options.animations) {
+                if (previousPositions && chart.data?.datasets?.length) {
+                    const fromFor = (axis) => ctx => {
+                        const datum = chart.data.datasets?.[ctx.datasetIndex]?.data?.[ctx.dataIndex];
+                        const key = datum?.x ?? datum?.t;
+                        const map = ctx.datasetIndex === 0 ? previousPositions.used : previousPositions.recommendation;
+                        const pos = key ? map?.get(key) : null;
+                        return pos ? pos[axis] : undefined;
+                    };
+
+                    chart.options.animations = chart.options.animations || {};
+                    chart.options.animations.x = { type: 'number', from: fromFor('x') };
+                    chart.options.animations.y = { type: 'number', from: fromFor('y') };
+                } else if (chart.options.animations) {
                     delete chart.options.animations.x;
                     delete chart.options.animations.y;
                 }
@@ -713,7 +750,9 @@
         function updateChartFromData(data) {
             const hasDaily = data.chartData && data.chartData.labels && data.chartData.labels.length > 0;
             const hasPerCheck = data.perCheckData && data.perCheckData.timestamps && data.perCheckData.timestamps.length > 0;
-            const previousDailyPositions = currentView === 'daily' ? captureDailyPointPositions() : null;
+            const previousPositions = currentView === 'daily'
+                ? captureDailyPointPositions()
+                : (currentView === 'per-check' ? capturePerCheckPointPositions() : null);
 
             if (data.chartData) {
                 dailyData.labels = data.chartData.labels;
@@ -727,7 +766,7 @@
 
             toggleChartVisibility(hasDaily || hasPerCheck);
             if (hasDaily || hasPerCheck) {
-                applyViewToChart(previousDailyPositions);
+                applyViewToChart(previousPositions);
             }
         }
 
