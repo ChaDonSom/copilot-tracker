@@ -597,7 +597,24 @@
             }
         }
 
-        function applyViewToChart() {
+        function captureDailyPointPositions() {
+            if (!chart?.data?.labels || chart.data.labels.length === 0) {
+                return null;
+            }
+
+            const labels = chart.data.labels;
+            const collectPositions = (meta) => new Map(labels.map((label, index) => {
+                const point = meta.data?.[index];
+                return point ? [label, { x: point.x, y: point.y }] : null;
+            }).filter(Boolean));
+
+            return {
+                used: collectPositions(chart.getDatasetMeta(0)),
+                recommendation: collectPositions(chart.getDatasetMeta(1)),
+            };
+        }
+
+        function applyViewToChart(previousDailyPositions = null) {
             if (currentView === 'daily') {
                 chart.data = dailyData;
                 chart.options.scales.x.type = 'category';
@@ -605,6 +622,21 @@
                 // For daily view, keep beginAtZero
                 chart.options.scales.y.beginAtZero = true;
                 delete chart.options.scales.y.min;
+                if (previousDailyPositions && chart.data?.labels?.length) {
+                    const fromFor = (axis) => ctx => {
+                        const label = chart.data.labels?.[ctx.dataIndex];
+                        const map = ctx.datasetIndex === 0 ? previousDailyPositions.used : previousDailyPositions.recommendation;
+                        const pos = label ? map?.get(label) : null;
+                        return pos ? pos[axis] : undefined;
+                    };
+
+                    chart.options.animations = chart.options.animations || {};
+                    chart.options.animations.x = { type: 'number', from: fromFor('x') };
+                    chart.options.animations.y = { type: 'number', from: fromFor('y') };
+                } else if (chart.options.animations) {
+                    delete chart.options.animations.x;
+                    delete chart.options.animations.y;
+                }
             } else {
                 chart.data = perCheckData;
                 chart.options.scales.x.type = 'time';
@@ -631,6 +663,10 @@
                     // Fallback if no data
                     chart.options.scales.y.beginAtZero = true;
                     delete chart.options.scales.y.min;
+                }
+                if (chart.options.animations) {
+                    delete chart.options.animations.x;
+                    delete chart.options.animations.y;
                 }
             }
             chart.update();
@@ -677,6 +713,7 @@
         function updateChartFromData(data) {
             const hasDaily = data.chartData && data.chartData.labels && data.chartData.labels.length > 0;
             const hasPerCheck = data.perCheckData && data.perCheckData.timestamps && data.perCheckData.timestamps.length > 0;
+            const previousDailyPositions = currentView === 'daily' ? captureDailyPointPositions() : null;
 
             if (data.chartData) {
                 dailyData.labels = data.chartData.labels;
@@ -690,7 +727,7 @@
 
             toggleChartVisibility(hasDaily || hasPerCheck);
             if (hasDaily || hasPerCheck) {
-                applyViewToChart();
+                applyViewToChart(previousDailyPositions);
             }
         }
 
