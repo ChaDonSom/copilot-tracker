@@ -15,6 +15,7 @@ class DashboardController extends Controller
     ) {}
 
     private const ALLOWED_RANGES = [0, 1, 7, 30]; // 0 = today only
+
     private const MAX_OFFSET = 52; // ~1.5 years back at 30-day range
 
     public function index(Request $request): View
@@ -23,7 +24,7 @@ class DashboardController extends Controller
 
         // Fetch latest snapshot or create one
         $latestSnapshot = $user->latestSnapshot();
-        if (!$latestSnapshot) {
+        if (! $latestSnapshot) {
             $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
         }
 
@@ -54,9 +55,9 @@ class DashboardController extends Controller
         $latestSnapshot = $this->githubService->checkAndStoreUsage($user);
 
         // If the API call failed, return an error
-        if (!$latestSnapshot) {
+        if (! $latestSnapshot) {
             return response()->json([
-                'error' => 'Failed to fetch usage data from GitHub. Please try again later.'
+                'error' => 'Failed to fetch usage data from GitHub. Please try again later.',
             ], 500);
         }
 
@@ -123,10 +124,11 @@ class DashboardController extends Controller
                 return 'Yesterday';
             } else {
                 [$start, $end] = $this->calculateDateRange($rangeDays, $offset, $user);
+
                 return $start->format('M d');
             }
         }
-        
+
         if ($offset === 0) {
             return 'Last ' . $rangeDays . ' day' . ($rangeDays > 1 ? 's' : '');
         }
@@ -146,12 +148,12 @@ class DashboardController extends Controller
     {
         $timezone = $user ? $user->getUserTimezone() : 'UTC';
         $now = now($timezone);
-        
+
         // Special case: range=0 means "today only"
         if ($rangeDays === 0) {
             // For offset=0, show today. For offset=1, show yesterday, etc.
             $start = $now->copy()->subDays($offset)->startOfDay();
-            
+
             // If showing today (offset=0), end at current time; otherwise end at start of next day (exclusive)
             if ($offset === 0) {
                 // Use the captured $now as an exclusive upper bound
@@ -159,10 +161,10 @@ class DashboardController extends Controller
             } else {
                 $end = $start->copy()->addDay(); // Start of next day (exclusive)
             }
-            
+
             return [$start, $end];
         }
-        
+
         // Regular range calculation (last N days)
         $end = $now->copy()->subDays($offset * $rangeDays)->addDay()->startOfDay();
         $start = $end->copy()->subDays($rangeDays);
@@ -173,7 +175,7 @@ class DashboardController extends Controller
     private function validateRangeParams(Request $request): array
     {
         $rangeDays = (int) $request->input('range', 30);
-        if (!in_array($rangeDays, self::ALLOWED_RANGES, true)) {
+        if (! in_array($rangeDays, self::ALLOWED_RANGES, true)) {
             $rangeDays = 30;
         }
 
@@ -249,7 +251,7 @@ class DashboardController extends Controller
 
     private function calculateRecommendation($snapshot, $history, $user = null)
     {
-        if (!$snapshot) {
+        if (! $snapshot) {
             return [
                 'dailyRecommended' => 0,
                 'daysRemaining' => 0,
@@ -267,9 +269,9 @@ class DashboardController extends Controller
         // Calculate recommended daily usage
         $dailyRecommended = $daysRemaining > 0 ? round($snapshot->remaining / $daysRemaining, 2) : 0;
 
-        // Calculate how much should have been used by now based on even distribution
-        $resetDateStart = $resetDate->copy()->subDays(30); // Assuming 30-day cycle
-        $totalDaysInCycle = max(1, $resetDateStart->diffInDays($resetDate));
+        // Calculate how much should have been used by now based on even distribution using the actual billing cycle length.
+        $resetDateStart = $this->getCycleStart($resetDate);
+        $totalDaysInCycle = $this->getCycleLengthInDays($resetDate, $resetDateStart);
         $daysPassed = max(0, $resetDateStart->diffInDays($now));
         $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
         $totalRecommendedByNow = round($daysPassed * $dailyIdealUsage);
@@ -341,10 +343,10 @@ class DashboardController extends Controller
 
             // Calculate recommendation line (ideal trajectory)
             if ($firstSnapshot) {
-                // Calculate cycle start from reset date (30 days back)
+                // Calculate cycle start from reset date based on actual billing interval.
                 $resetDate = $snapshot->reset_date;
-                $cycleStart = $resetDate->copy()->subDays(30);
-                $totalDaysInCycle = 30;
+                $cycleStart = $this->getCycleStart($resetDate);
+                $totalDaysInCycle = $this->getCycleLengthInDays($resetDate, $cycleStart);
                 $dailyIdealUsage = $snapshot->quota_limit / $totalDaysInCycle;
 
                 // Calculate elapsed time from cycle start in user's timezone
@@ -378,7 +380,7 @@ class DashboardController extends Controller
      */
     private function calculatePaceStatus($snapshot): ?array
     {
-        if (!$snapshot || !$snapshot->quota_limit || $snapshot->quota_limit <= 0) {
+        if (! $snapshot || ! $snapshot->quota_limit || $snapshot->quota_limit <= 0) {
             return null;
         }
 
@@ -386,8 +388,8 @@ class DashboardController extends Controller
         $now = now();
 
         // Calculate cycle boundaries
-        $cycleStart = $resetDate->copy()->subDays(30); // Assuming 30-day cycle
-        $totalDaysInCycle = 30;
+        $cycleStart = $this->getCycleStart($resetDate);
+        $totalDaysInCycle = $this->getCycleLengthInDays($resetDate, $cycleStart);
         $daysPassed = max(0, $cycleStart->diffInDays($now, false));
 
         // Add fractional day for current time, clamped to cycle length
@@ -420,6 +422,26 @@ class DashboardController extends Controller
             'idealUsedByNow' => (int) $idealUsedByNow,
             'actualUsed' => (int) $actualUsed,
         ];
+    }
+
+    private function getCycleStart($resetDate)
+    {
+        if (! $resetDate) {
+            return now()->subDays(30);
+        }
+
+        $cycleStart = $resetDate->copy()->subMonthNoOverflow();
+
+        if ($cycleStart->greaterThan(now())) {
+            return $resetDate->copy()->subDays(30);
+        }
+
+        return $cycleStart;
+    }
+
+    private function getCycleLengthInDays($resetDate, $cycleStart): int
+    {
+        return max(1, $cycleStart->diffInDays($resetDate));
     }
 
     private function snapshotToArray(UsageSnapshot $snapshot): array
