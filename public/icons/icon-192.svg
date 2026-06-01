@@ -1,0 +1,20 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="96" cy="96" r="88" fill="#0A2540"/>
+
+  <!-- Copilot-inspired inner circle -->
+  <circle cx="96" cy="96" r="68" fill="#00D4FF"/>
+
+  <!-- Stylized "C" for Copilot -->
+  <text x="96" y="118" font-family="Arial Black, sans-serif" font-size="110" font-weight="900" fill="#0A2540" text-anchor="middle" dominant-baseline="middle">C</text>
+
+  <!-- Bar chart for usage tracking (bottom right) -->
+  <!-- Bars representing monthly KPIs -->
+  <rect x="118" y="128" width="14" height="28" rx="2" fill="#0A2540"/>
+  <rect x="136" y="115" width="14" height="41" rx="2" fill="#0A2540"/>
+  <rect x="154" y="102" width="14" height="54" rx="2" fill="#0A2540"/>
+
+  <!-- Subtle grid lines for dashboard feel -->
+  <line x1="118" y1="145" x2="172" y2="145" stroke="#0A2540" stroke-width="2" stroke-opacity="0.3"/>
+  <line x1="118" y1="130" x2="172" y2="130" stroke="#0A2540" stroke-width="2" stroke-opacity="0.3"/>
+</svg>
