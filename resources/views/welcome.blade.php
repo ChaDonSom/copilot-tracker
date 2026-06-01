@@ -9,7 +9,7 @@
         <meta name="theme-color" content="#000000">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-title" content="{{ config('app.name', 'Laravel') }}">
-        <link rel="apple-touch-icon" href="{{ asset('icons/icon-192.svg') }}">
+        <link rel="apple-touch-icon" href="{{ asset('icons/icon-192.png') }}">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
