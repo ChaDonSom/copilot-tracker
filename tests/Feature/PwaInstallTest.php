@@ -11,7 +11,7 @@ class PwaInstallTest extends TestCase
         $html = view('welcome')->render();
 
         $this->assertStringContainsString(
-            '<link rel="manifest" href="'.asset('manifest.json').'">',
+            '<link rel="manifest" href="' . asset('manifest.json') . '">',
             $html
         );
     }
