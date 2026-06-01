@@ -6,7 +6,7 @@ The dashboard graph had three issues:
 
 1. **Time Alignment Issue**: For users in timezones like America/New_York, the '1D' view on 'per-check' mode showed the back half of yesterday and front half of today, with a flat section in the middle for nighttime. This was because the chart used UTC for day boundaries instead of the user's local timezone.
 
-2. **Y-Axis Scaling Issue**: The chart started at 0, but when premium request counts are in the hundreds, this compressed the graph line making it harder to see features and trends.
+2. **Y-Axis Scaling Issue**: The chart started at 0, but when AI credit counts are in the hundreds, this compressed the graph line making it harder to see features and trends.
 
 3. **"Today" vs "Last 24 Hours"**: The original "1D" button showed "last 24 hours" which spans two calendar days. Users wanted a way to see only the current day's data aligned with their timezone.
 

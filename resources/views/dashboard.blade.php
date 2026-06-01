@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>GitHub Copilot Usage Dashboard</title>
+    <title>GitHub Copilot AI Credits Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
@@ -287,7 +287,7 @@
 </head>
 <body>
     <div class="topbar">
-        <h1>🚀 Copilot Usage</h1>
+        <h1>🚀 Copilot AI Credits</h1>
         <div class="topbar-right">
             <span>{{ $user->github_username }}@if($user->copilot_plan) · {{ $user->copilot_plan }}@endif</span>
             @if($lastCheckedAt)
@@ -311,7 +311,7 @@
         @else
             @if($snapshot->percent_remaining < 25)
                 <div class="alert">
-                    ⚠️ You've used {{ number_format(100 - $snapshot->percent_remaining, 1) }}% of your monthly quota. Consider slowing down.
+                    ⚠️ You've used {{ number_format(100 - $snapshot->percent_remaining, 1) }}% of your monthly AI credit allowance. Consider slowing down.
                 </div>
             @endif
 
@@ -320,19 +320,19 @@
                 {{-- End-of-day % left --}}
                 @if($recommendation && $recommendation['endOfDayPercentageLeft'] !== null)
                 <div class="hero-card" data-stat="end-of-day-percentage">
-                    <div class="label">End-of-Day Quota Left</div>
+                    <div class="label">End-of-Day AI Credits Left</div>
                     <div class="big-value {{ $recommendation['endOfDayPercentageLeft'] < 25 ? 'color-orange' : 'color-green' }}">
                         {{ number_format($recommendation['endOfDayPercentageLeft'], 1) }}%
                     </div>
-                    <div class="detail">Projected: {{ number_format($recommendation['endOfDayUsage']) }} / {{ number_format($snapshot->quota_limit) }} used</div>
+                    <div class="detail">Projected: {{ number_format($recommendation['endOfDayUsage']) }} / {{ number_format($snapshot->quota_limit) }} AI credits used</div>
                 </div>
                 @endif
 
-                {{-- Requests used / left --}}
+                {{-- AI credits used / left --}}
                 <div class="hero-card" data-stat="used-left">
-                    <div class="label">Requests Used / Remaining</div>
+                    <div class="label">AI Credits Used / Remaining</div>
                     <div class="big-value color-blue">{{ number_format($snapshot->used) }}</div>
-                    <div class="detail">{{ number_format($snapshot->remaining) }} remaining of {{ number_format($snapshot->quota_limit) }}</div>
+                    <div class="detail">{{ number_format($snapshot->remaining) }} remaining of {{ number_format($snapshot->quota_limit) }} AI credits</div>
                     <div class="progress-bar" style="margin-top:12px">
                         <div class="progress-fill {{ $snapshot->percent_remaining < 25 ? 'warning' : '' }}"
                              style="width: {{ 100 - $snapshot->percent_remaining }}%"></div>
@@ -355,14 +355,14 @@
                 <div class="stat-card" data-stat="daily-recommended">
                     <div class="stat-label">Recommended / Day</div>
                     <div class="stat-value">{{ number_format($recommendation['dailyRecommended']) }}</div>
-                    <div class="stat-sub">requests/day · {{ number_format($recommendation['daysRemaining']) }} day{{ $recommendation['daysRemaining'] != 1 ? 's' : '' }} left</div>
+                    <div class="stat-sub">credits/day · {{ number_format($recommendation['daysRemaining']) }} day{{ $recommendation['daysRemaining'] != 1 ? 's' : '' }} left</div>
                 </div>
                 @endif
 
                 <div class="stat-card" data-stat="today-used">
-                    <div class="stat-label">Used Today</div>
+                    <div class="stat-label">Credits Used Today</div>
                     <div class="stat-value">{{ number_format($todayUsed) }}</div>
-                    <div class="stat-sub">requests so far today</div>
+                    <div class="stat-sub">credits so far today</div>
                 </div>
 
                 @if($paceStatus)
@@ -379,11 +379,11 @@
                     </div>
                     <div class="stat-sub">
                         @if($paceStatus['status'] === 'on-pace')
-                            tracking ideal usage rate
+                            tracking ideal credit rate
                         @elseif($paceStatus['status'] === 'under-pace')
-                            requests under ideal pace
+                            credits under ideal pace
                         @else
-                            requests over ideal pace
+                            credits over ideal pace
                         @endif
                     </div>
                 </div>
@@ -502,7 +502,7 @@
             labels: {!! json_encode($chartData['labels']) !!},
             datasets: [
                 {
-                    label: 'Requests Used',
+                    label: 'AI Credits Used',
                     data: {!! json_encode($chartData['used']) !!},
                     borderColor: 'rgb(102, 126, 234)',
                     backgroundColor: gradient1,
@@ -864,7 +864,7 @@
                         v.textContent = eodPct.toFixed(1) + '%';
                         v.className = 'big-value ' + (eodPct < 25 ? 'color-orange' : 'color-green');
                     }
-                    if (d) d.textContent = 'Projected: ' + Math.round(eodUsage).toLocaleString() + ' / ' + quotaLimit.toLocaleString() + ' used';
+                    if (d) d.textContent = 'Projected: ' + Math.round(eodUsage).toLocaleString() + ' / ' + quotaLimit.toLocaleString() + ' AI credits used';
                 }
 
                 // Hero: used/left
@@ -874,7 +874,7 @@
                     const d = ulCard.querySelector('.detail');
                     const pf = ulCard.querySelector('.progress-fill');
                     if (v) v.textContent = used.toLocaleString();
-                    if (d) d.textContent = remaining.toLocaleString() + ' remaining of ' + quotaLimit.toLocaleString();
+                    if (d) d.textContent = remaining.toLocaleString() + ' remaining of ' + quotaLimit.toLocaleString() + ' AI credits';
                     if (pf) {
                         pf.style.width = Math.min(100, 100 - percentRemaining) + '%';
                         pf.classList.toggle('warning', percentRemaining < 25);
@@ -900,7 +900,7 @@
                     const sub = drCard.querySelector('.stat-sub');
                     if (v) v.textContent = n(data.recommendation.dailyRecommended).toLocaleString();
                     const dr = Math.round(n(data.recommendation.daysRemaining));
-                    if (sub) sub.textContent = 'requests/day · ' + dr + ' day' + (dr !== 1 ? 's' : '') + ' left';
+                    if (sub) sub.textContent = 'credits/day · ' + dr + ' day' + (dr !== 1 ? 's' : '') + ' left';
                 }
 
                 // Secondary: today used
@@ -946,9 +946,9 @@
                         }
                     }
                     if (sub) {
-                        if (ps.status === 'on-pace') sub.textContent = 'tracking ideal usage rate';
-                        else if (ps.status === 'under-pace') sub.textContent = 'requests under ideal pace';
-                        else sub.textContent = 'requests over ideal pace';
+                        if (ps.status === 'on-pace') sub.textContent = 'tracking ideal credit rate';
+                        else if (ps.status === 'under-pace') sub.textContent = 'credits under ideal pace';
+                        else sub.textContent = 'credits over ideal pace';
                     }
                 }
 

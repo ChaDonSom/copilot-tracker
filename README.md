@@ -1,6 +1,6 @@
 # Copilot Tracker - Laravel App
 
-A Laravel application for centrally tracking GitHub Copilot premium request usage across multiple machines with **web dashboard** and API access.
+A Laravel application for centrally tracking GitHub Copilot AI credit usage across multiple machines with **web dashboard** and API access.
 
 ## Features
 
@@ -128,11 +128,11 @@ Deployment takes approximately 40-60 seconds.
 
 ### Dashboard Features
 
-- **Current Usage Stats** - See your quota limit, remaining requests, and usage percentage
+- **Current Usage Stats** - See your AI credit allowance, remaining credits, and usage percentage
 - **Usage Trend Graph** - Historical view showing:
-  - Daily requests used
+  - Daily AI credits used
   - Recommended usage (target usage over time)
-- **Visual Warnings** - Color-coded progress bars warn when running low on quota
+- **Visual Warnings** - Color-coded progress bars warn when running low on AI credits
 - **Auto-Refresh** - Dashboard data auto-refreshes every 5 minutes (only when tab is visible), with optional manual refresh
 - **Automatic Timezone Detection** - Charts automatically align with your local timezone for accurate day boundaries
 
@@ -195,17 +195,17 @@ Returns server status. Used by the bash script to check availability.
 GET /api/usage
 ```
 
-Returns the latest cached usage data.
+Returns the latest cached AI credit usage data.
 
 ```json
 {
   "username": "your-username",
   "copilot_plan": "individual_pro",
   "usage": {
-    "quota_limit": 1500,
-    "remaining": 1054,
-    "used": 446,
-    "percent_remaining": 70.28,
+    "quota_limit": 7000,
+    "remaining": 6054,
+    "used": 946,
+    "percent_remaining": 86.49,
     "reset_date": "2026-03-01"
   },
   "checked_at": "2026-02-10T15:00:00.000Z",
@@ -227,7 +227,7 @@ Forces a fresh check from the GitHub API.
 GET /api/usage/today
 ```
 
-Returns usage delta for the current day.
+Returns the AI credit delta for the current day.
 
 ```json
 {
@@ -235,10 +235,10 @@ Returns usage delta for the current day.
   "date": "2026-02-10",
   "used_today": 25,
   "current": {
-    "remaining": 1054,
-    "used": 446,
-    "quota_limit": 1500,
-    "percent_remaining": 70.28
+    "remaining": 6054,
+    "used": 946,
+    "quota_limit": 7000,
+    "percent_remaining": 86.49
   },
   "snapshots_today": 8,
   "first_check": "2026-02-10T09:00:00.000Z",
@@ -252,7 +252,7 @@ Returns usage delta for the current day.
 GET /api/usage/history?days=7&limit=50
 ```
 
-Returns historical usage snapshots.
+Returns historical AI credit snapshots.
 
 ## Using with the Bash Script
 
@@ -311,17 +311,17 @@ The app is designed to be respectful of GitHub's API rate limits:
 - `github_oauth_token` - Encrypted GitHub OAuth token
 - `timezone` - User's timezone (defaults to UTC)
 - `copilot_plan` - Copilot subscription plan
-- `quota_limit` - Monthly quota limit
-- `quota_reset_date` - When quota resets
+- `quota_limit` - Monthly AI credit allowance
+- `quota_reset_date` - When the allowance resets
 - `last_checked_at` - Last successful check
 
 ### Usage Snapshots Table
 - `user_id` - Reference to user
 - `quota_limit` - Limit at time of check
-- `remaining` - Requests remaining
-- `used` - Requests used
+- `remaining` - AI credits remaining
+- `used` - AI credits used
 - `percent_remaining` - Percentage remaining
-- `reset_date` - Quota reset date
+- `reset_date` - Allowance reset date
 - `checked_at` - When this snapshot was taken
 
 ## License
